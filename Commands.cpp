@@ -100,7 +100,7 @@ void _removeBackgroundSign(char *cmd_line)
 
 // TODO: Add your implementation for classes in Commands.h
 
-SmallShell::SmallShell() : m_oldpwd(""), m_prompt(DEFAULT_PROMPT)
+SmallShell::SmallShell() : m_oldpwd(""), m_prompt(DEFAULT_PROMPT), m_jobs()
 {
     // TODO: add your implementation
 }
@@ -208,12 +208,12 @@ void GetCurrDirCommand::execute()
     printf("%s", pwd);
 }
 
-void ChangeDirCommand::_changeDirAndUpdateOldPwd(const char *newdir)
+void ChangeDirCommand::_changeDirAndUpdateOldPwd(const std::string newdir)
 {
     char *pwd = (char *)malloc(COMMAND_ARGS_MAX_LENGTH + 1);
     getcwd(pwd, sizeof(pwd));
 
-    int result = chdir(newdir);
+    int result = chdir(newdir.c_str());
     if (result == -1)
     {
         _smashPError("chdir");
@@ -226,8 +226,6 @@ void ChangeDirCommand::_changeDirAndUpdateOldPwd(const char *newdir)
 
 void ChangeDirCommand::execute()
 {
-    SmallShell &smash = SmallShell::getInstance();
-
     if (m_args.size() > 2)
     {
         _printErrorToScreen("cd", "too many arguments");
@@ -237,7 +235,7 @@ void ChangeDirCommand::execute()
     {
         if (m_args[1] == "-")
         {
-            if (string(*m_plastPwd).empty())
+            if ((*m_plastPwd).empty())
             {
                 _printErrorToScreen("cd", "OLDPWD not set");
                 return;
@@ -249,7 +247,7 @@ void ChangeDirCommand::execute()
         }
         else
         {
-            _changeDirAndUpdateOldPwd(m_args[1].c_str());
+            _changeDirAndUpdateOldPwd(m_args[1]);
         }
     }
 }
@@ -279,7 +277,7 @@ void KillCommand::execute()
     JobsList::JobEntry *job = m_jobs->getJobById(job_id);
     if (job == nullptr)
     {
-        _printErrorToScreen("kill", "job-id" + m_args[2] + "does not exist");
+        _printErrorToScreen("kill", "job-id " + m_args[2] + " does not exist");
         return;
     }
 
@@ -295,7 +293,7 @@ void ForegroundCommand::execute()
 
     if (m_args.size() == 2)
     {
-        int job_id = stoi(m_args[2]);
+        int job_id = stoi(m_args[1]);
         if (job_id < 1)
         {
             _printErrorToScreen("fg", INVALID_ARGUMNETS);
@@ -305,7 +303,7 @@ void ForegroundCommand::execute()
         job = m_jobs->getJobById(job_id);
         if (job == nullptr)
         {
-            _printErrorToScreen("fg", "job-id" + m_args[2] + "does not exist");
+            _printErrorToScreen("fg", "job-id " + m_args[1] + " does not exist");
             return;
         }
     }
@@ -315,18 +313,231 @@ void ForegroundCommand::execute()
     }
     else
     {
-        job = m_jobs->getLastStoppedJob(nullptr);
+        job = m_jobs->getLastJob(nullptr);
         if (job == nullptr)
         {
             _printErrorToScreen("fg", "jobs list is empty");
             return;
         }
     }
+
     cout << job->getCommand() << " : " << job->getPid();
     if (kill(job->getPid(), SIGCONT) == -1)
     {
         _smashPError("kill");
         return;
     }
+
     waitpid(job->getPid(), nullptr, 0);
+    m_jobs->removeJobById(job->getJobId());
+}
+
+void BackgroundCommand::execute()
+{
+    JobsList::JobEntry *job;
+
+    if (m_args.size() == 2)
+    {
+        int job_id = stoi(m_args[1]);
+        if (job_id < 1)
+        {
+            _printErrorToScreen("bg", INVALID_ARGUMNETS);
+            return;
+        }
+
+        job = m_jobs->getJobById(job_id);
+        if (job == nullptr)
+        {
+            _printErrorToScreen("bg", "job-id " + m_args[1] + " does not exist");
+            return;
+        }
+        else if (!job->isStopped())
+        {
+            _printErrorToScreen("bg", "job-id " + m_args[1] + " is already running in the background");
+            return;
+        }
+    }
+    else if (m_args.size() > 2)
+    {
+        _printErrorToScreen("bg", INVALID_ARGUMNETS);
+    }
+    else
+    {
+        job = m_jobs->getLastStoppedJob(nullptr);
+        if (job == nullptr)
+        {
+            _printErrorToScreen("bg", "there is no stopped jobs to resume");
+            return;
+        }
+    }
+
+    cout << job->getCommand() << " : " << job->getPid();
+    if (kill(job->getPid(), SIGCONT) == -1)
+    {
+        _smashPError("kill");
+        return;
+    }
+
+    job->setStopped(false);
+
+    //TODO: check if we need o add & to the end of the command
+}
+
+void QuitCommand::execute()
+{
+    if (m_args.size() > 1)
+    {
+        if (m_args[1] == "kill")
+        {
+            m_jobs->killAllJobs();
+        }
+    }
+    else
+    {
+        while (wait(NULL) != -1)
+            ;
+    }
+
+    exit(1);
+
+    //TDO: vcheck how to exit smash
+}
+
+JobsList::JobsList() : m_jobEntries(MAX_JOBS), m_maxJobId(0)
+{
+    for (int i = 0; i < MAX_JOBS; i++)
+    {
+        m_jobEntries[i] = nullptr;
+    }
+}
+JobsList::~JobsList()
+{
+    for (int i = 1; i < m_maxJobId; i++)
+    {
+        delete m_jobEntries[i];
+    }
+}
+void JobsList::addJob(Command *cmd, pid_t pid, time_t time, bool isStopped)
+{
+    removeFinishedJobs();
+    JobEntry *job = nullptr;
+    if (static_cast<int>((m_jobEntries.size() - 1))== m_maxJobId)
+    {
+        m_jobEntries.resize(m_maxJobId * 2);
+
+        for (int i = m_maxJobId + 1; i < m_maxJobId * 2; i++)
+        {
+            m_jobEntries[i] = nullptr;
+        }
+    }
+    int id = ++m_maxJobId;
+    job = new JobEntry(cmd, pid, time, id, isStopped);
+    m_jobEntries[id] = job;
+}
+void JobsList::printJobsList()
+{
+    removeFinishedJobs();
+    for (int i = 1; i < static_cast<int>(m_jobEntries.size()); i++)
+    {
+        JobEntry *job = m_jobEntries[i];
+
+        if (job == nullptr)
+        {
+            continue;
+        }
+        string str = "[" + to_string(i) + "]" + " " + job->getCommand() + " : " + to_string(job->getPid()) + " ";
+        str += to_string(difftime(time(nullptr), job->getStartTime())) + " secs";
+        if (job->isStopped())
+        {
+            str += " (stopped)";
+        }
+        std::cout << str << std::endl;
+    }
+}
+void JobsList::killAllJobs()
+{
+    int num = 0;
+    for (int i = 0; i < static_cast<int>(m_jobEntries.size()); i++)
+    {
+        if (m_jobEntries[i] != nullptr)
+        {
+            num++;
+        }
+    }
+    std::cout << "smash: sending SIGKILL signal to " << num << "jobs:" << std::endl;
+    for (JobEntry *job : m_jobEntries)
+    {
+        if (job == nullptr)
+        {
+            continue;
+        }
+        std::cout << to_string(job->getPid()) << ": " << job->getCommand() << std::endl;
+        kill(job->getPid(), SIGKILL);
+    }
+}
+void JobsList::removeFinishedJobs()
+{
+    bool maxFinished = false;
+    for (int i = 0; i < static_cast<int>(m_jobEntries.size()); i++)
+    {
+        JobEntry *job = m_jobEntries[i];
+        if (job == nullptr)
+        {
+            continue;
+        }
+        pid_t status = waitpid(job->getPid(), nullptr, WNOHANG);
+        if (status > 0) //finished
+        {
+            if (i == m_maxJobId)
+            {
+                maxFinished = true;
+            }
+            waitpid(job->getPid(), nullptr, 0);
+            m_jobEntries[i] = nullptr;
+        }
+    }
+    if (maxFinished)
+    {
+        for (int i = m_maxJobId; i > 0; --i)
+        {
+            if (m_jobEntries[i] != nullptr)
+            {
+                m_maxJobId = i;
+                return;
+            }
+        }
+        m_maxJobId = 0;
+    }
+}
+JobsList::JobEntry *JobsList::getJobById(int jobId)
+{
+    if ((jobId < 1) || (jobId > m_maxJobId))
+    {
+        return nullptr;
+    }
+    else
+    {
+        return m_jobEntries[jobId];
+    }
+}
+void JobsList::removeJobById(int jobId)
+{
+    delete getJobById(jobId);
+    m_jobEntries[jobId] = nullptr;
+}
+JobsList::JobEntry *JobsList::getLastJob(int *lastJobId)
+{
+    *lastJobId = m_maxJobId;
+    return getJobById(m_maxJobId);
+}
+JobsList::JobEntry *JobsList::getLastStoppedJob(int *jobId)
+{
+    for (int i = m_maxJobId; i > 0; --i)
+    {
+        if ((m_jobEntries[i] != nullptr) && m_jobEntries[i]->isStopped())
+        {
+            return m_jobEntries[i];
+        }
+    }
+    return nullptr;
 }

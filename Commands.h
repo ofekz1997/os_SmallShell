@@ -25,11 +25,11 @@ public:
 class BuiltInCommand : public Command
 {
 protected:
-    vector<string> m_args;
+    std::vector<std::string> m_args;
 
 public:
     BuiltInCommand(const char *cmd_line);
-    virtual ~BuiltInCommand(){}
+    virtual ~BuiltInCommand() {}
 };
 
 class ExternalCommand : public Command
@@ -65,12 +65,13 @@ public:
 class ChangeDirCommand : public BuiltInCommand
 {
 private:
-    void _changeDirAndUpdateOldPwd(const char *newdir);
-    char **m_plastPwd;
+    void _changeDirAndUpdateOldPwd(const std::string newdir);
+    std::string *m_plastPwd;
 
 public:
     // TODO: Add your data members public:
-    ChangeDirCommand(const char *cmd_line, char **plastPwd);
+    ChangeDirCommand(const char *cmd_line, std::string *plastPwd):
+                    BuiltInCommand(cmd_line), m_plastPwd(plastPwd){}
     virtual ~ChangeDirCommand() {}
     void execute() override;
 };
@@ -95,14 +96,6 @@ public:
     void execute() override;
 };
 
-class JobsList;
-class QuitCommand : public BuiltInCommand
-{
-    // TODO: Add your data members public:
-    QuitCommand(const char *cmd_line, JobsList *jobs);
-    virtual ~QuitCommand() {}
-    void execute() override;
-};
 
 class JobsList
 {
@@ -113,22 +106,24 @@ public:
         Command *m_cmd;
         pid_t m_pid;
         time_t m_start;
+        int m_jobId;
         bool m_isStopped;
 
     public:
-        JobEntry(Command *cmd, pid_t pid, time_t start, bool isStopped = false) : m_cmd(cmd), m_pid(pid), m_start(start), m_isStopped(isStopped) {}
-        std::string getCommand() { return string(m_cmd->getCommand()); }
+        JobEntry(Command *cmd, pid_t pid, time_t start, int jobId, bool isStopped = false) :
+                m_cmd(cmd), m_pid(pid), m_start(start), m_jobId(jobId), m_isStopped(isStopped) {}
+        std::string getCommand() { return m_cmd->getCommand(); }
         pid_t getPid() { return m_pid; }
         time_t getStartTime() { return m_start; }
         bool isStopped() { return m_isStopped; }
         void setStopped(bool flag) { m_isStopped = flag; }
+        int getJobId() { return m_jobId; }
     };
-    std::vector<JobEntry> m_jobEntries;
+
     // TODO: Add your data members
-public:
-    JobsList() : m_jobEntries(MAX_JOBS){};
+    JobsList();
     ~JobsList();
-    void addJob(Command *cmd, bool isStopped = false);
+    void addJob(Command *cmd, pid_t pid, time_t time, bool isStopped = false);
     void printJobsList();
     void killAllJobs();
     void removeFinishedJobs();
@@ -137,6 +132,9 @@ public:
     JobEntry *getLastJob(int *lastJobId);
     JobEntry *getLastStoppedJob(int *jobId);
     // TODO: Add extra methods or modify exisitng ones as needed
+private:
+    std::vector<JobEntry *> m_jobEntries;
+    int m_maxJobId;
 };
 
 class JobsCommand : public BuiltInCommand
@@ -156,7 +154,7 @@ private:
     JobsList *m_jobs;
 
 public:
-    KillCommand(const char *cmd_line, JobsList *jobs) : BuiltInCommand(cmd_line), m_jobs(m_jobs) {}
+    KillCommand(const char *cmd_line, JobsList *jobs) : BuiltInCommand(cmd_line), m_jobs(jobs) {}
     virtual ~KillCommand() {}
     void execute() override;
 };
@@ -167,7 +165,7 @@ class ForegroundCommand : public BuiltInCommand
     JobsList *m_jobs;
 
 public:
-    ForegroundCommand(const char *cmd_line, JobsList *jobs) : BuiltInCommand(cmd_line), m_jobs(m_jobs) {}
+    ForegroundCommand(const char *cmd_line, JobsList *jobs) : BuiltInCommand(cmd_line), m_jobs(jobs) {}
     virtual ~ForegroundCommand() {}
     void execute() override;
 };
@@ -175,8 +173,10 @@ public:
 class BackgroundCommand : public BuiltInCommand
 {
     // TODO: Add your data members
+    JobsList *m_jobs;
+
 public:
-    BackgroundCommand(const char *cmd_line, JobsList *jobs);
+    BackgroundCommand(const char *cmd_line, JobsList *jobs) : BuiltInCommand(cmd_line), m_jobs(jobs) {}
     virtual ~BackgroundCommand() {}
     void execute() override;
 };
@@ -186,6 +186,16 @@ class CatCommand : public BuiltInCommand
 public:
     CatCommand(const char *cmd_line);
     virtual ~CatCommand() {}
+    void execute() override;
+};
+
+class QuitCommand : public BuiltInCommand
+{
+    JobsList *m_jobs;
+public:
+    QuitCommand(const char *cmd_line, JobsList *jobs) :
+                BuiltInCommand(cmd_line), m_jobs(jobs) {}
+    virtual ~QuitCommand() {}
     void execute() override;
 };
 
@@ -203,7 +213,7 @@ class SmallShell
 {
 private:
     // TODO: Add your data members
-    char *m_oldpwd;
+    std::string m_oldpwd;
     std::string m_prompt;
     JobsList m_jobs;
     SmallShell();
