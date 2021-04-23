@@ -122,6 +122,7 @@ SmallShell::~SmallShell()
 */
 Command *SmallShell::CreateCommand(const char *cmd_line)
 {
+    m_jobs.removeFinishedJobs();
     string cmd_s = _trim(string(cmd_line));
     string firstWord = cmd_s.substr(0, cmd_s.find_first_of(" \n"));
 
@@ -145,9 +146,25 @@ Command *SmallShell::CreateCommand(const char *cmd_line)
     {
         return new JobsCommand(cmd_line, &m_jobs);
     }
+    else if (firstWord.compare("kill") == 0)
+    {
+        return new KillCommand(cmd_line, &m_jobs);
+    }
+    else if (firstWord.compare("fg") == 0)
+    {
+        return new ForegroundCommand(cmd_line, &m_jobs);
+    }
+    else if (firstWord.compare("bg") == 0)
+    {
+        return new BackgroundCommand(cmd_line, &m_jobs);
+    }
+    else if (firstWord.compare("quit") == 0)
+    {
+        return new QuitCommand(cmd_line, &m_jobs);
+    }
     else
     {
-        return new ExternalCommand(cmd_line);
+        return new ExternalCommand(cmd_line, &m_jobs);
     }
 
     return nullptr;
@@ -155,31 +172,28 @@ Command *SmallShell::CreateCommand(const char *cmd_line)
 
 void SmallShell::executeCommand(const char *cmd_line)
 {
-    // TODO: Add your implementation here
-    // for example:
-    // Command* cmd = CreateCommand(cmd_line);
-    // cmd->execute();
-    // Please note that you must fork smash process for some commands (e.g., external commands....)
+    Command *cmd = CreateCommand(cmd_line);
+    cmd->execute();
 }
 
-BuiltInCommand::BuiltInCommand(const char *cmd_line) : Command(cmd_line)
+BuiltInCommand::BuiltInCommand(const char *cmd_line) : Command(cmd_line), m_args()
 {
     char **temp = (char **)malloc(sizeof(char *) * COMMAND_MAX_ARGS);
     for (int i = 0; i < COMMAND_MAX_ARGS; i++)
     {
         temp[i] = nullptr;
     }
-
-    _parseCommandLine(cmd_line, temp);
-
+    char *tempCmd = (char *)malloc(sizeof(char) * COMMAND_ARGS_MAX_LENGTH);
+    memcpy(tempCmd,cmd_line, sizeof(char) * COMMAND_ARGS_MAX_LENGTH);
+    _removeBackgroundSign(tempCmd);
+    _parseCommandLine(tempCmd, temp);
+    free(tempCmd);
     for (int i = 0; i < COMMAND_MAX_ARGS && temp[i] != nullptr; i++)
     {
-        m_args[i] = string(temp[i]);
+        m_args.push_back(string(temp[i]));
+        free(temp[i]);
     }
-
-    if (m_args[0][m_args[0].length() - 2] == '&')
-    {
-    }
+    free(temp);
 }
 
 void ChangePromptCommand::execute()
@@ -192,26 +206,27 @@ void ChangePromptCommand::execute()
     }
     else
     {
-        smash.SetPrompt(m_args[1]);
+        smash.SetPrompt(m_args[1] +"> ");
     }
 }
 
 void ShowPidCommand::execute()
 {
-    std::cout << "smash pid is" << getpid();
+    std::cout << "smash pid is " << getpid() << std::endl;
 }
 
 void GetCurrDirCommand::execute()
 {
     char *pwd = (char *)malloc(COMMAND_ARGS_MAX_LENGTH + 1);
-    getcwd(pwd, sizeof(pwd));
-    printf("%s", pwd);
+    pwd = getcwd(pwd, COMMAND_ARGS_MAX_LENGTH + 1);
+    std::cout << pwd << std::endl;
+    free(pwd);
 }
 
 void ChangeDirCommand::_changeDirAndUpdateOldPwd(const std::string newdir)
 {
     char *pwd = (char *)malloc(COMMAND_ARGS_MAX_LENGTH + 1);
-    getcwd(pwd, sizeof(pwd));
+    getcwd(pwd, COMMAND_ARGS_MAX_LENGTH + 1);
 
     int result = chdir(newdir.c_str());
     if (result == -1)
@@ -222,6 +237,7 @@ void ChangeDirCommand::_changeDirAndUpdateOldPwd(const std::string newdir)
     {
         *m_plastPwd = pwd;
     }
+    free(pwd);
 }
 
 void ChangeDirCommand::execute()
@@ -421,7 +437,7 @@ void JobsList::addJob(Command *cmd, pid_t pid, time_t time, bool isStopped)
 {
     removeFinishedJobs();
     JobEntry *job = nullptr;
-    if (static_cast<int>((m_jobEntries.size() - 1))== m_maxJobId)
+    if (static_cast<int>((m_jobEntries.size() - 1)) == m_maxJobId)
     {
         m_jobEntries.resize(m_maxJobId * 2);
 
@@ -446,7 +462,7 @@ void JobsList::printJobsList()
             continue;
         }
         string str = "[" + to_string(i) + "]" + " " + job->getCommand() + " : " + to_string(job->getPid()) + " ";
-        str += to_string(difftime(time(nullptr), job->getStartTime())) + " secs";
+        str += to_string(int(difftime(time(nullptr), job->getStartTime()))) + " secs";
         if (job->isStopped())
         {
             str += " (stopped)";
@@ -540,4 +556,34 @@ JobsList::JobEntry *JobsList::getLastStoppedJob(int *jobId)
         }
     }
     return nullptr;
+}
+void ExternalCommand::execute()
+{
+    pid_t pid = fork();
+
+    if (pid == 0)
+    {
+        char *const cmd = (char *)malloc(sizeof(char) * sizeof(m_cmd_line));
+        memcpy(cmd, m_cmd_line, sizeof(char) * sizeof(m_cmd_line));
+        char *const args[] = {"bash","-c", cmd, NULL};
+
+        execv("/bin/bash", args); 
+        _smashPError("execv");
+        return;
+    }
+    else if (pid > 0)
+    {
+        if (_isBackgroundComamnd(m_cmd_line))
+        {
+            m_jobs->addJob(this, pid, time(nullptr));
+        }
+        else
+        {
+            waitpid(pid, nullptr, 0);
+        }
+    }
+    else
+    {
+        _smashPError("fork");
+    }
 }

@@ -10,6 +10,7 @@ const std::string WHITESPACE = " \n\r\t\f\v";
 
 class Command
 {
+protected:
     const char *m_cmd_line;
     // TODO: Add your data members
 public:
@@ -32,14 +33,16 @@ public:
     virtual ~BuiltInCommand() {}
 };
 
+class JobsList;
 class ExternalCommand : public Command
 {
+    JobsList *m_jobs;
 public:
-    ExternalCommand(const char *cmd_line) : Command(cmd_line)
+    ExternalCommand(const char *cmd_line, JobsList *jobs) : Command(cmd_line), m_jobs(jobs)
     {
     }
-    virtual ~ExternalCommand() {}
-    void execute() override {}
+    virtual ~ExternalCommand(){}
+    void execute() override;
 };
 
 class PipeCommand : public Command
