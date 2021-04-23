@@ -2,11 +2,25 @@
 #define SMASH_COMMAND_H_
 
 #include <vector>
+#include <fcntl.h>
+
 #define COMMAND_ARGS_MAX_LENGTH (200)
 #define COMMAND_MAX_ARGS (20)
 #define DEFAULT_PROMPT "smash> "
+#define STDOUT 1
 #define MAX_JOBS 100
 const std::string WHITESPACE = " \n\r\t\f\v";
+
+static void _printErrorToScreen(std::string command, std::string error_msg)
+{
+    std::cerr << "smash error: " << command << ": " << error_msg << std::endl;
+}
+
+static void _smashPError(std::string syscall)
+{
+    std::string msg = "smash error: " + syscall + " failed";
+    perror(msg.c_str());
+}
 
 class Command
 {
@@ -17,7 +31,7 @@ public:
     Command(const char *cmd_line) : m_cmd_line(cmd_line) {}
     virtual ~Command() {}
     virtual void execute() = 0;
-    std::string getCommand() { return m_cmd_line; }
+    std::string getString() { return m_cmd_line; }
     //virtual void prepare();
     //virtual void cleanup();
     // TODO: Add your extra methods if needed
@@ -115,7 +129,7 @@ public:
     public:
         JobEntry(Command *cmd, pid_t pid, time_t start, int jobId, bool isStopped = false) :
                 m_cmd(cmd), m_pid(pid), m_start(start), m_jobId(jobId), m_isStopped(isStopped) {}
-        std::string getCommand() { return m_cmd->getCommand(); }
+        Command* getCommand() { return m_cmd; }
         pid_t getPid() { return m_pid; }
         time_t getStartTime() { return m_start; }
         bool isStopped() { return m_isStopped; }
@@ -187,7 +201,7 @@ public:
 class CatCommand : public BuiltInCommand
 {
 public:
-    CatCommand(const char *cmd_line);
+    CatCommand(const char *cmd_line) : BuiltInCommand(cmd_line) {}
     virtual ~CatCommand() {}
     void execute() override;
 };
@@ -218,10 +232,13 @@ private:
     // TODO: Add your data members
     std::string m_oldpwd;
     std::string m_prompt;
-    JobsList m_jobs;
     SmallShell();
 
 public:
+    pid_t m_currForegroundProcess = -1;
+    Command* m_currForegroundCommand = nullptr;
+    JobsList m_jobs;
+
     Command *CreateCommand(const char *cmd_line);
     SmallShell(SmallShell const &) = delete;     // disable copy ctor
     void operator=(SmallShell const &) = delete; // disable = operator
@@ -235,6 +252,7 @@ public:
         // Instantiated on first use.
         return instance;
     }
+
     ~SmallShell();
     void executeCommand(const char *cmd_line);
     // TODO: add extra methods as needed

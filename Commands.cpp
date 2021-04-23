@@ -26,16 +26,7 @@ using namespace std;
 
 #define INVALID_ARGUMNETS "invalid arguments"
 
-void _printErrorToScreen(string command, string error_msg)
-{
-    cerr << "smash error: " << command << ": " << error_msg << endl;
-}
 
-void _smashPError(string syscall)
-{
-    string msg = "smash error: " + syscall + " failed";
-    perror(msg.c_str());
-}
 
 string _ltrim(const std::string &s)
 {
@@ -162,6 +153,10 @@ Command *SmallShell::CreateCommand(const char *cmd_line)
     {
         return new QuitCommand(cmd_line, &m_jobs);
     }
+    else if (firstWord.compare("cat") == 0)
+    {
+        return new CatCommand(cmd_line);
+    }
     else
     {
         return new ExternalCommand(cmd_line, &m_jobs);
@@ -184,7 +179,7 @@ BuiltInCommand::BuiltInCommand(const char *cmd_line) : Command(cmd_line), m_args
         temp[i] = nullptr;
     }
     char *tempCmd = (char *)malloc(sizeof(char) * COMMAND_ARGS_MAX_LENGTH);
-    memcpy(tempCmd,cmd_line, sizeof(char) * COMMAND_ARGS_MAX_LENGTH);
+    memcpy(tempCmd, cmd_line, sizeof(char) * COMMAND_ARGS_MAX_LENGTH);
     _removeBackgroundSign(tempCmd);
     _parseCommandLine(tempCmd, temp);
     free(tempCmd);
@@ -206,7 +201,7 @@ void ChangePromptCommand::execute()
     }
     else
     {
-        smash.SetPrompt(m_args[1] +"> ");
+        smash.SetPrompt(m_args[1] + "> ");
     }
 }
 
@@ -344,8 +339,13 @@ void ForegroundCommand::execute()
         return;
     }
 
+    SmallShell& smash = SmallShell::getInstance();
+    smash.m_currForegroundCommand = job->getCommand();
+    smash.m_currForegroundProcess = job->getPid();
     waitpid(job->getPid(), nullptr, 0);
     m_jobs->removeJobById(job->getJobId());
+    smash.m_currForegroundCommand = nullptr;
+    smash.m_currForegroundProcess = -1;
 }
 
 void BackgroundCommand::execute()
@@ -461,7 +461,7 @@ void JobsList::printJobsList()
         {
             continue;
         }
-        string str = "[" + to_string(i) + "]" + " " + job->getCommand() + " : " + to_string(job->getPid()) + " ";
+        string str = "[" + to_string(i) + "]" + " " + job->getCommand()->getString() + " : " + to_string(job->getPid()) + " ";
         str += to_string(int(difftime(time(nullptr), job->getStartTime()))) + " secs";
         if (job->isStopped())
         {
@@ -563,11 +563,12 @@ void ExternalCommand::execute()
 
     if (pid == 0)
     {
+        setpgrp();
         char *const cmd = (char *)malloc(sizeof(char) * sizeof(m_cmd_line));
         memcpy(cmd, m_cmd_line, sizeof(char) * sizeof(m_cmd_line));
-        char *const args[] = {"bash","-c", cmd, NULL};
+        char *const args[] = {"bash", "-c", cmd, NULL};
 
-        execv("/bin/bash", args); 
+        execv("/bin/bash", args);
         _smashPError("execv");
         return;
     }
@@ -579,11 +580,54 @@ void ExternalCommand::execute()
         }
         else
         {
+            SmallShell& smash = SmallShell::getInstance();
+            smash.m_currForegroundProcess = pid;
+            smash.m_currForegroundCommand = this;
             waitpid(pid, nullptr, 0);
+            smash.m_currForegroundProcess = -1;
+            smash.m_currForegroundCommand = nullptr;
         }
     }
     else
     {
         _smashPError("fork");
+    }
+}
+void CatCommand::execute()
+{
+    if(m_args.size() == 1)
+    {
+        _printErrorToScreen("cat","not enough arguments");
+        return;
+    }
+    for (size_t i = 1; i < m_args.size(); i++)
+    {
+        int fd = open(m_args[i].c_str(), O_RDONLY);
+        if(fd == -1)
+        {
+            _smashPError("open");
+        }
+        char ch = 0;
+        ssize_t res = 0;
+        while(true)
+        {
+            res = read(fd,&ch,1);
+            if(res == -1)
+            {
+                _smashPError("read");
+            }
+            else if(res == 0)
+            {
+                return;
+            }
+            else
+            {
+                if(write(STDOUT,&ch,1) == -1)
+                {
+                    _smashPError("write");
+                }
+            }
+        }
+        close(fd);
     }
 }
