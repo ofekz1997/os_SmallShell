@@ -205,14 +205,30 @@ void ChangePromptCommand::execute()
 
 void ShowPidCommand::execute()
 {
-    std::cout << "smash pid is " << getpid() << std::endl;
+    pid_t pid = getpid();
+    if(pid == -1)
+    {
+        _smashPError("getpid");
+    }
+    else
+    {
+        std::cout << "smash pid is " << pid << std::endl;
+    }
+    
 }
 
 void GetCurrDirCommand::execute()
 {
     char *pwd = (char *)malloc(COMMAND_ARGS_MAX_LENGTH + 1);
     pwd = getcwd(pwd, COMMAND_ARGS_MAX_LENGTH + 1);
-    std::cout << pwd << std::endl;
+    if(pwd == nullptr)
+    {
+        _smashPError("getcwd");
+    }
+    else
+    {
+        std::cout << pwd << std::endl;
+    }
     free(pwd);
 }
 
@@ -220,6 +236,11 @@ void ChangeDirCommand::_changeDirAndUpdateOldPwd(const std::string newdir)
 {
     char *pwd = (char *)malloc(COMMAND_ARGS_MAX_LENGTH + 1);
     getcwd(pwd, COMMAND_ARGS_MAX_LENGTH + 1);
+    if(pwd == nullptr)
+    {
+        _smashPError("getcwd");
+        return;
+    }
 
     int result = chdir(newdir.c_str());
     if (result == -1)
@@ -337,8 +358,10 @@ void ForegroundCommand::execute()
         return;
     }
 
+    std::string command = job->getCommand();
+    pid_t pid = job->getPid();
     m_jobs->removeJobById(job->getJobId());
-    Command::runProcessInForeground(job->getPid(), job->getCommand());
+    Command::runProcessInForeground(pid, command);
 }
 
 void BackgroundCommand::execute()
@@ -405,8 +428,7 @@ void QuitCommand::execute()
     }
     else
     {
-        while (wait(NULL) != -1)
-            ;
+        while (wait(NULL) != -1);
     }
 
     exit(1);
@@ -457,7 +479,13 @@ void JobsList::printJobsList()
             continue;
         }
         string str = "[" + to_string(i) + "]" + " " + job->getCommand() + " : " + to_string(job->getPid()) + " ";
-        str += to_string(int(difftime(time(nullptr), job->getStartTime()))) + " secs";
+        time_t curTime = time(nullptr);
+        if(curTime == -1)
+        {
+            _smashPError("time");
+            return;
+        }
+        str += to_string(int(difftime(curTime, job->getStartTime()))) + " secs";
         if (job->isStopped())
         {
             str += " (stopped)";
@@ -483,7 +511,11 @@ void JobsList::killAllJobs()
             continue;
         }
         std::cout << to_string(job->getPid()) << ": " << job->getCommand() << std::endl;
-        kill(job->getPid(), SIGKILL);
+        int result = kill(job->getPid(), SIGKILL);
+        if (result == -1)
+        {
+            _smashPError("kill");
+        }
     }
 }
 void JobsList::removeFinishedJobs()
@@ -506,12 +538,15 @@ void JobsList::removeFinishedJobs()
                 {
                     maxFinished = true;
                 }
-                cout << stat << endl;
                 //waitpid(job->getPid(), nullptr, 0);
-                cout << i << endl;
                 delete m_jobEntries[i];
                 m_jobEntries[i] = nullptr;
             }
+        }
+        else if (ret <= 0)
+        {
+            _smashPError("waitpid");
+            return;
         }
     }
     if (maxFinished)
@@ -542,10 +577,26 @@ void JobsList::removeJobById(int jobId)
 {
     delete getJobById(jobId);
     m_jobEntries[jobId] = nullptr;
+    if(jobId == m_maxJobId)
+    {
+        for (int i = m_maxJobId; i > 0; --i)
+        {
+            if (m_jobEntries[i] != nullptr)
+            {
+                m_maxJobId = i;
+                return;
+            }
+        }
+        m_maxJobId = 0;
+    }
 }
 JobsList::JobEntry *JobsList::getLastJob(int *lastJobId)
 {
-    *lastJobId = m_maxJobId;
+    if(lastJobId!= nullptr)
+    {
+        *lastJobId = m_maxJobId;
+    }
+
     return getJobById(m_maxJobId);
 }
 JobsList::JobEntry *JobsList::getLastStoppedJob(int *jobId)
@@ -554,6 +605,10 @@ JobsList::JobEntry *JobsList::getLastStoppedJob(int *jobId)
     {
         if ((m_jobEntries[i] != nullptr) && m_jobEntries[i]->isStopped())
         {
+            if(jobId!= nullptr)
+            {
+                *jobId = i;
+            }
             return m_jobEntries[i];
         }
     }
@@ -566,8 +621,11 @@ void ExternalCommand::execute()
     if (pid == 0)
     {
         setpgrp();
+        
         char *const cmd = (char *)malloc(sizeof(char) * sizeof(m_cmd_line));
         memcpy(cmd, m_cmd_line, sizeof(char) * sizeof(m_cmd_line));
+        _removeBackgroundSign(cmd);
+
         char bash[] = {"bash"};
         char c[] ={"-c"};
         char *const args[] = {bash, c, cmd, NULL};
@@ -652,6 +710,7 @@ void Command::runProcessInForeground(pid_t pid, std::string command)
         }
         else if (ret < 0)
         {
+            _smashPError("waitpid");
             break;
         }
     }
