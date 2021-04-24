@@ -26,8 +26,6 @@ using namespace std;
 
 #define INVALID_ARGUMNETS "invalid arguments"
 
-
-
 string _ltrim(const std::string &s)
 {
     size_t start = s.find_first_not_of(WHITESPACE);
@@ -332,24 +330,20 @@ void ForegroundCommand::execute()
         }
     }
 
-    cout << job->getCommand() << " : " << job->getPid();
+    cout << job->getCommand() << " : " << job->getPid() << endl;
     if (kill(job->getPid(), SIGCONT) == -1)
     {
         _smashPError("kill");
         return;
     }
 
-    SmallShell& smash = SmallShell::getInstance();
-    smash.m_currForegroundCommand = job->getCommand();
-    smash.m_currForegroundProcess = job->getPid();
-    waitpid(job->getPid(), nullptr, 0);
     m_jobs->removeJobById(job->getJobId());
-    smash.m_currForegroundCommand = nullptr;
-    smash.m_currForegroundProcess = -1;
+    Command::runProcessInForeground(job->getPid(), job->getCommand());
 }
 
 void BackgroundCommand::execute()
 {
+    FUNC_ENTRY()
     JobsList::JobEntry *job;
 
     if (m_args.size() == 2)
@@ -387,7 +381,7 @@ void BackgroundCommand::execute()
         }
     }
 
-    cout << job->getCommand() << " : " << job->getPid();
+    cout << job->getCommand() << " : " << job->getPid() << endl;
     if (kill(job->getPid(), SIGCONT) == -1)
     {
         _smashPError("kill");
@@ -395,6 +389,7 @@ void BackgroundCommand::execute()
     }
 
     job->setStopped(false);
+    FUNC_EXIT()
 
     //TODO: check if we need o add & to the end of the command
 }
@@ -433,7 +428,7 @@ JobsList::~JobsList()
         delete m_jobEntries[i];
     }
 }
-void JobsList::addJob(Command *cmd, pid_t pid, time_t time, bool isStopped)
+void JobsList::addJob(std::string cmd, pid_t pid, time_t time, bool isStopped)
 {
     removeFinishedJobs();
     JobEntry *job = nullptr;
@@ -461,7 +456,7 @@ void JobsList::printJobsList()
         {
             continue;
         }
-        string str = "[" + to_string(i) + "]" + " " + job->getCommand()->getString() + " : " + to_string(job->getPid()) + " ";
+        string str = "[" + to_string(i) + "]" + " " + job->getCommand() + " : " + to_string(job->getPid()) + " ";
         str += to_string(int(difftime(time(nullptr), job->getStartTime()))) + " secs";
         if (job->isStopped())
         {
@@ -501,15 +496,22 @@ void JobsList::removeFinishedJobs()
         {
             continue;
         }
-        pid_t status = waitpid(job->getPid(), nullptr, WNOHANG);
-        if (status > 0) //finished
+        int stat = 0;
+        pid_t ret = waitpid(job->getPid(), &stat, WNOHANG);
+        if (ret > 0) //finished
         {
-            if (i == m_maxJobId)
+            if (WIFEXITED(stat))
             {
-                maxFinished = true;
+                if (i == m_maxJobId)
+                {
+                    maxFinished = true;
+                }
+                cout << stat << endl;
+                //waitpid(job->getPid(), nullptr, 0);
+                cout << i << endl;
+                delete m_jobEntries[i];
+                m_jobEntries[i] = nullptr;
             }
-            waitpid(job->getPid(), nullptr, 0);
-            m_jobEntries[i] = nullptr;
         }
     }
     if (maxFinished)
@@ -566,7 +568,9 @@ void ExternalCommand::execute()
         setpgrp();
         char *const cmd = (char *)malloc(sizeof(char) * sizeof(m_cmd_line));
         memcpy(cmd, m_cmd_line, sizeof(char) * sizeof(m_cmd_line));
-        char *const args[] = {"bash", "-c", cmd, NULL};
+        char bash[] = {"bash"};
+        char c[] ={"-c"};
+        char *const args[] = {bash, c, cmd, NULL};
 
         execv("/bin/bash", args);
         _smashPError("execv");
@@ -576,16 +580,11 @@ void ExternalCommand::execute()
     {
         if (_isBackgroundComamnd(m_cmd_line))
         {
-            m_jobs->addJob(this, pid, time(nullptr));
+            m_jobs->addJob(this->getString(), pid, time(nullptr));
         }
         else
         {
-            SmallShell& smash = SmallShell::getInstance();
-            smash.m_currForegroundProcess = pid;
-            smash.m_currForegroundCommand = this;
-            waitpid(pid, nullptr, 0);
-            smash.m_currForegroundProcess = -1;
-            smash.m_currForegroundCommand = nullptr;
+            Command::runProcessInForeground(pid, this->getString());
         }
     }
     else
@@ -595,39 +594,68 @@ void ExternalCommand::execute()
 }
 void CatCommand::execute()
 {
-    if(m_args.size() == 1)
+    if (m_args.size() == 1)
     {
-        _printErrorToScreen("cat","not enough arguments");
+        _printErrorToScreen("cat", "not enough arguments");
         return;
     }
     for (size_t i = 1; i < m_args.size(); i++)
     {
         int fd = open(m_args[i].c_str(), O_RDONLY);
-        if(fd == -1)
+        if (fd == -1)
         {
             _smashPError("open");
+            continue;
         }
         char ch = 0;
         ssize_t res = 0;
-        while(true)
+        while (true)
         {
-            res = read(fd,&ch,1);
-            if(res == -1)
+            res = read(fd, &ch, 1);
+            if (res == -1)
             {
                 _smashPError("read");
+                break;
             }
-            else if(res == 0)
+            else if (res == 0)
             {
-                return;
+                break;
             }
             else
             {
-                if(write(STDOUT,&ch,1) == -1)
+                if (write(STDOUT, &ch, 1) == -1)
                 {
                     _smashPError("write");
+                    break;
                 }
             }
         }
         close(fd);
     }
+}
+
+void Command::runProcessInForeground(pid_t pid, std::string command)
+{
+    SmallShell &smash = SmallShell::getInstance();
+    smash.m_currForegroundProcess = pid;
+    smash.m_currForegroundCommand = command;
+    int stat = 0;
+    while (true)
+    {
+        pid_t ret = waitpid(pid, &stat, WNOHANG | WUNTRACED);
+        if (ret > 0) //finished
+        {
+            if (WIFEXITED(stat) || WIFSTOPPED(stat) || WIFSIGNALED(stat)) // end
+            {
+                break;
+            }
+        }
+        else if (ret < 0)
+        {
+            break;
+        }
+    }
+
+    smash.m_currForegroundProcess = -1;
+    smash.m_currForegroundCommand = "";
 }
