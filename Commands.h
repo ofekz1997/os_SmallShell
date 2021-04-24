@@ -8,6 +8,7 @@
 #define COMMAND_MAX_ARGS (20)
 #define DEFAULT_PROMPT "smash> "
 #define STDOUT 1
+#define STDIN 0
 #define MAX_JOBS 100
 const std::string WHITESPACE = " \n\r\t\f\v";
 
@@ -62,22 +63,29 @@ public:
 
 class PipeCommand : public Command
 {
-    // TODO: Add your data members
+    Command* m_cmd1;
+    Command* m_cmd2;
+    bool m_isErr;
+
 public:
-    PipeCommand(const char *cmd_line);
+    PipeCommand(const char *cmd_line) : Command(cmd_line) {}
     virtual ~PipeCommand() {}
     void execute() override;
+    void prepare();
 };
 
 class RedirectionCommand : public Command
 {
-    // TODO: Add your data members
+    Command * m_cmd;
+    std::string m_outPutFile;
+    bool m_isAppend;
+
 public:
-    explicit RedirectionCommand(const char *cmd_line);
-    virtual ~RedirectionCommand() {}
+    explicit RedirectionCommand(const char *cmd_line) : Command(cmd_line) {}
+    virtual ~RedirectionCommand() { delete m_cmd; }
     void execute() override;
-    //void prepare() override;
-    //void cleanup() override;
+    void prepare();
+    //void cleanup() override {}
 };
 
 class ChangeDirCommand : public BuiltInCommand

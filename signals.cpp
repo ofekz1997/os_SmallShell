@@ -19,6 +19,7 @@ void ctrlZHandler(int sig_num)
     if (result == -1)
     {
       _smashPError("kill");
+      return;
     }
     else
     {
@@ -28,6 +29,7 @@ void ctrlZHandler(int sig_num)
       smash.m_currForegroundCommand = "";
     }
   }
+  return;
 }
 
 void ctrlCHandler(int sig_num)
@@ -40,6 +42,7 @@ void ctrlCHandler(int sig_num)
     if (result == -1)
     {
       _smashPError("kill");
+      return;
     }
     else
     {
