@@ -606,6 +606,7 @@ void CatCommand::execute()
         if(fd == -1)
         {
             _smashPError("open");
+            continue;
         }
         char ch = 0;
         ssize_t res = 0;
@@ -615,16 +616,18 @@ void CatCommand::execute()
             if(res == -1)
             {
                 _smashPError("read");
+                break;
             }
             else if(res == 0)
             {
-                return;
+                break;
             }
             else
             {
                 if(write(STDOUT,&ch,1) == -1)
                 {
                     _smashPError("write");
+                    break;
                 }
             }
         }
