@@ -25,7 +25,7 @@ void ctrlZHandler(int sig_num)
       cout << "smash: process " << smash.m_currForegroundProcess << " was stopped" << endl;
       smash.m_jobs.addJob(smash.m_currForegroundCommand, smash.m_currForegroundProcess, time(nullptr), true);
       smash.m_currForegroundProcess = -1;
-      smash.m_currForegroundCommand = nullptr;
+      smash.m_currForegroundCommand = "";
     }
   }
 }
@@ -45,7 +45,7 @@ void ctrlCHandler(int sig_num)
     {
       cout << "smash: process " << smash.m_currForegroundProcess << " was killed" << endl;
       smash.m_currForegroundProcess = -1;
-      smash.m_currForegroundCommand = nullptr;
+      smash.m_currForegroundCommand = "";
     }
   }
 }

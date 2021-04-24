@@ -32,6 +32,7 @@ public:
     virtual ~Command() {}
     virtual void execute() = 0;
     std::string getString() { return m_cmd_line; }
+    static void runProcessInForeground(pid_t pid, std::string command);
     //virtual void prepare();
     //virtual void cleanup();
     // TODO: Add your extra methods if needed
@@ -120,16 +121,16 @@ public:
     class JobEntry
     {
     private:
-        Command *m_cmd;
+        std::string m_cmd;
         pid_t m_pid;
         time_t m_start;
         int m_jobId;
         bool m_isStopped;
 
     public:
-        JobEntry(Command *cmd, pid_t pid, time_t start, int jobId, bool isStopped = false) :
+        JobEntry(std::string cmd, pid_t pid, time_t start, int jobId, bool isStopped = false) :
                 m_cmd(cmd), m_pid(pid), m_start(start), m_jobId(jobId), m_isStopped(isStopped) {}
-        Command* getCommand() { return m_cmd; }
+        std::string getCommand() { return m_cmd; }
         pid_t getPid() { return m_pid; }
         time_t getStartTime() { return m_start; }
         bool isStopped() { return m_isStopped; }
@@ -140,7 +141,7 @@ public:
     // TODO: Add your data members
     JobsList();
     ~JobsList();
-    void addJob(Command *cmd, pid_t pid, time_t time, bool isStopped = false);
+    void addJob(std::string cmd, pid_t pid, time_t time, bool isStopped = false);
     void printJobsList();
     void killAllJobs();
     void removeFinishedJobs();
@@ -236,7 +237,7 @@ private:
 
 public:
     pid_t m_currForegroundProcess = -1;
-    Command* m_currForegroundCommand = nullptr;
+    std::string m_currForegroundCommand = "";
     JobsList m_jobs;
 
     Command *CreateCommand(const char *cmd_line);
