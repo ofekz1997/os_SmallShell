@@ -115,58 +115,64 @@ Command *SmallShell::CreateCommand(const char *cmd_line)
     string cmd_s = _trim(string(cmd_line));
     string firstWord = cmd_s.substr(0, cmd_s.find_first_of(" \n"));
 
-    if (firstWord.compare("pwd") == 0)
+    Command* cmd = nullptr;
+    if (cmd_s.find(">") != std::string::npos)
     {
-        return new GetCurrDirCommand(cmd_line);
+        cmd = new RedirectionCommand(cmd_line);
+    }
+    else if (firstWord.compare("pwd") == 0)
+    {
+        cmd = new GetCurrDirCommand(cmd_line);
     }
     else if (firstWord.compare("showpid") == 0)
     {
-        return new ShowPidCommand(cmd_line);
+        cmd = new ShowPidCommand(cmd_line);
     }
     else if (firstWord.compare("chprompt") == 0)
     {
-        return new ChangePromptCommand(cmd_line);
+        cmd = new ChangePromptCommand(cmd_line);
     }
     else if (firstWord.compare("cd") == 0)
     {
-        return new ChangeDirCommand(cmd_line, &m_oldpwd);
+        cmd = new ChangeDirCommand(cmd_line, &m_oldpwd);
     }
     else if (firstWord.compare("jobs") == 0)
     {
-        return new JobsCommand(cmd_line, &m_jobs);
+        cmd = new JobsCommand(cmd_line, &m_jobs);
     }
     else if (firstWord.compare("kill") == 0)
     {
-        return new KillCommand(cmd_line, &m_jobs);
+        cmd = new KillCommand(cmd_line, &m_jobs);
     }
     else if (firstWord.compare("fg") == 0)
     {
-        return new ForegroundCommand(cmd_line, &m_jobs);
+        cmd = new ForegroundCommand(cmd_line, &m_jobs);
     }
     else if (firstWord.compare("bg") == 0)
     {
-        return new BackgroundCommand(cmd_line, &m_jobs);
+        cmd = new BackgroundCommand(cmd_line, &m_jobs);
     }
     else if (firstWord.compare("quit") == 0)
     {
-        return new QuitCommand(cmd_line, &m_jobs);
+        cmd = new QuitCommand(cmd_line, &m_jobs);
     }
     else if (firstWord.compare("cat") == 0)
     {
-        return new CatCommand(cmd_line);
+        cmd = new CatCommand(cmd_line);
     }
     else
     {
-        return new ExternalCommand(cmd_line, &m_jobs);
+        cmd = new ExternalCommand(cmd_line, &m_jobs);
     }
 
-    return nullptr;
+    return cmd;
 }
 
 void SmallShell::executeCommand(const char *cmd_line)
 {
     Command *cmd = CreateCommand(cmd_line);
     cmd->execute();
+    delete cmd;
 }
 
 BuiltInCommand::BuiltInCommand(const char *cmd_line) : Command(cmd_line), m_args()
@@ -206,7 +212,7 @@ void ChangePromptCommand::execute()
 void ShowPidCommand::execute()
 {
     pid_t pid = getpid();
-    if(pid == -1)
+    if (pid == -1)
     {
         _smashPError("getpid");
     }
@@ -214,14 +220,13 @@ void ShowPidCommand::execute()
     {
         std::cout << "smash pid is " << pid << std::endl;
     }
-    
 }
 
 void GetCurrDirCommand::execute()
 {
     char *pwd = (char *)malloc(COMMAND_ARGS_MAX_LENGTH + 1);
     pwd = getcwd(pwd, COMMAND_ARGS_MAX_LENGTH + 1);
-    if(pwd == nullptr)
+    if (pwd == nullptr)
     {
         _smashPError("getcwd");
     }
@@ -236,7 +241,7 @@ void ChangeDirCommand::_changeDirAndUpdateOldPwd(const std::string newdir)
 {
     char *pwd = (char *)malloc(COMMAND_ARGS_MAX_LENGTH + 1);
     getcwd(pwd, COMMAND_ARGS_MAX_LENGTH + 1);
-    if(pwd == nullptr)
+    if (pwd == nullptr)
     {
         _smashPError("getcwd");
         return;
@@ -428,10 +433,11 @@ void QuitCommand::execute()
     }
     else
     {
-        while (wait(NULL) != -1);
+        while (wait(NULL) != -1)
+            ;
     }
 
-    exit(1);
+    exit(0);
 
     //TDO: vcheck how to exit smash
 }
@@ -480,7 +486,7 @@ void JobsList::printJobsList()
         }
         string str = "[" + to_string(i) + "]" + " " + job->getCommand() + " : " + to_string(job->getPid()) + " ";
         time_t curTime = time(nullptr);
-        if(curTime == -1)
+        if (curTime == -1)
         {
             _smashPError("time");
             return;
@@ -543,7 +549,7 @@ void JobsList::removeFinishedJobs()
                 m_jobEntries[i] = nullptr;
             }
         }
-        else if (ret <= 0)
+        else if (ret < 0)
         {
             _smashPError("waitpid");
             return;
@@ -577,7 +583,7 @@ void JobsList::removeJobById(int jobId)
 {
     delete getJobById(jobId);
     m_jobEntries[jobId] = nullptr;
-    if(jobId == m_maxJobId)
+    if (jobId == m_maxJobId)
     {
         for (int i = m_maxJobId; i > 0; --i)
         {
@@ -592,7 +598,7 @@ void JobsList::removeJobById(int jobId)
 }
 JobsList::JobEntry *JobsList::getLastJob(int *lastJobId)
 {
-    if(lastJobId!= nullptr)
+    if (lastJobId != nullptr)
     {
         *lastJobId = m_maxJobId;
     }
@@ -605,7 +611,7 @@ JobsList::JobEntry *JobsList::getLastStoppedJob(int *jobId)
     {
         if ((m_jobEntries[i] != nullptr) && m_jobEntries[i]->isStopped())
         {
-            if(jobId!= nullptr)
+            if (jobId != nullptr)
             {
                 *jobId = i;
             }
@@ -621,13 +627,13 @@ void ExternalCommand::execute()
     if (pid == 0)
     {
         setpgrp();
-        
+
         char *const cmd = (char *)malloc(sizeof(char) * sizeof(m_cmd_line));
         memcpy(cmd, m_cmd_line, sizeof(char) * sizeof(m_cmd_line));
         _removeBackgroundSign(cmd);
 
         char bash[] = {"bash"};
-        char c[] ={"-c"};
+        char c[] = {"-c"};
         char *const args[] = {bash, c, cmd, NULL};
 
         execv("/bin/bash", args);
@@ -717,4 +723,162 @@ void Command::runProcessInForeground(pid_t pid, std::string command)
 
     smash.m_currForegroundProcess = -1;
     smash.m_currForegroundCommand = "";
+}
+
+void RedirectionCommand::execute() //TODO: ExternalCommand bug
+{
+    prepare();
+    int temp_stdout_fd = dup(STDOUT);
+    if (temp_stdout_fd == -1)
+    {
+        _smashPError("dup");
+        return;
+    }
+
+    int flags = O_RDWR | O_CREAT;
+    if (m_isAppend)
+    {
+        flags = flags | O_APPEND;
+    }
+    else
+    {
+        flags = flags | O_TRUNC;
+    }
+
+    int fd_out = open(m_outPutFile.c_str(), flags, S_IRWXU | S_IRWXG | S_IRWXO);
+
+    if (fd_out == -1)
+    {
+        _smashPError("open");
+        return;
+    }
+
+    if (close(STDOUT) == -1)
+    {
+        _smashPError("close");
+        return;
+    }
+    if (dup(fd_out) == -1)
+    {
+        _smashPError("dup");
+        return;
+    }
+    if (close(fd_out) == -1)
+    {
+        _smashPError("close");
+        return;
+    }
+
+    m_cmd->execute();
+
+    if (close(STDOUT) == -1)
+    {
+        _smashPError("close");
+        return;
+    }
+    if (dup(temp_stdout_fd) == -1)
+    {
+        _smashPError("dup");
+        return;
+    }
+    if (close(temp_stdout_fd) == -1)
+    {
+        _smashPError("close");
+        return;
+    }
+}
+
+void RedirectionCommand::prepare()
+{
+    std::string s(m_cmd_line);
+    std::string delimiter = ">";
+    std::string cmd;
+    std::string file;
+
+    size_t pos = 0;
+    pos = s.find_first_of(delimiter);
+    cmd = s.substr(0, pos);
+    ++pos;
+
+    if (s[pos] == '>')
+    {
+        ++pos;
+        m_isAppend = true;
+    }
+    else
+    {
+        m_isAppend = false;
+    }
+
+    file = s.substr(pos, s.size());
+
+    SmallShell &smash = SmallShell::getInstance();
+    m_cmd = smash.CreateCommand(cmd.c_str());
+    m_outPutFile = _trim(file);
+}
+
+void PipeCommand::prepare()
+{
+    std::string s(m_cmd_line);
+    std::string delimiter = "|";
+    std::string cmd1;
+    std::string cmd2;
+
+    size_t pos = 0;
+    pos = s.find_first_of(delimiter);
+    cmd1 = s.substr(0, pos);
+    ++pos;
+
+    if (s[pos] == '&')
+    {
+        ++pos;
+        m_isErr = true;
+    }
+    else
+    {
+        m_isErr = false;
+    }
+
+    cmd2 = s.substr(pos, s.size());
+
+    SmallShell &smash = SmallShell::getInstance();
+
+    char *tempCmd1 = (char *)malloc(sizeof(char) * COMMAND_ARGS_MAX_LENGTH);
+    memcpy(tempCmd1, cmd1.c_str(), sizeof(char) * COMMAND_ARGS_MAX_LENGTH);
+    _removeBackgroundSign(tempCmd1);
+
+    char *tempCmd2 = (char *)malloc(sizeof(char) * COMMAND_ARGS_MAX_LENGTH);
+    memcpy(tempCmd2, cmd2.c_str(), sizeof(char) * COMMAND_ARGS_MAX_LENGTH);
+    _removeBackgroundSign(tempCmd2);
+
+    m_cmd1 = smash.CreateCommand(tempCmd1);
+    m_cmd2 = smash.CreateCommand(tempCmd2);
+}
+
+void PipeCommand::execute()
+{
+    int my_pipe[2];
+    pipe(my_pipe);
+
+    if (fork() == 0)
+    { // cmd1
+        close(my_pipe[0]);
+        close(STDOUT);
+        dup(my_pipe[1]);
+        close(my_pipe[1]);
+        m_cmd1->execute();
+    }
+    else
+    { // smash
+        if (fork() == 0)
+        { // cmd2
+            close(my_pipe[1]);
+            close(STDIN);
+            dup(my_pipe[0]);
+            close(my_pipe[0]);
+            m_cmd2->execute();
+        }
+    }
+
+    //TODO: get pids and figure out how to wait for them
 }
