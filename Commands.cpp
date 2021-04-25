@@ -115,7 +115,7 @@ Command *SmallShell::CreateCommand(const char *cmd_line)
     string cmd_s = _trim(string(cmd_line));
     string firstWord = cmd_s.substr(0, cmd_s.find_first_of(" \n"));
 
-    Command* cmd = nullptr;
+    Command *cmd = nullptr;
     if (cmd_s.find(">") != std::string::npos)
     {
         cmd = new RedirectionCommand(cmd_line);
@@ -622,6 +622,7 @@ JobsList::JobEntry *JobsList::getLastStoppedJob(int *jobId)
 }
 void ExternalCommand::execute()
 {
+    cout << m_cmd_line << endl;
     pid_t pid = fork();
 
     if (pid == 0)
@@ -725,10 +726,9 @@ void Command::runProcessInForeground(pid_t pid, std::string command)
     smash.m_currForegroundCommand = "";
 }
 
-void RedirectionCommand::execute() //TODO: ExternalCommand bug
+void RedirectionCommand::execute() 
 {
-    prepare();
-    cout << typeid(m_cmd).name();
+    
     int temp_stdout_fd = dup(STDOUT);
     if (temp_stdout_fd == -1)
     {
@@ -740,7 +740,6 @@ void RedirectionCommand::execute() //TODO: ExternalCommand bug
         _smashPError("close");
         return;
     }
-
 
     int flags = O_RDWR | O_CREAT;
     if (m_isAppend)
@@ -760,7 +759,6 @@ void RedirectionCommand::execute() //TODO: ExternalCommand bug
         return;
     }
 
-
     m_cmd->execute();
 
     if (close(STDOUT) == -1)
@@ -779,7 +777,6 @@ void RedirectionCommand::execute() //TODO: ExternalCommand bug
         return;
     }
 }
-
 
 void RedirectionCommand::prepare()
 {
@@ -806,7 +803,14 @@ void RedirectionCommand::prepare()
     file = s.substr(pos, s.size());
 
     SmallShell &smash = SmallShell::getInstance();
-    m_cmd = smash.CreateCommand(cmd.c_str());
+    char *copy_cmd = new char[cmd.size() + 1];
+    for (size_t i = 0; i < cmd.size(); i++)
+    {
+        copy_cmd[i] = cmd[i];
+    }
+    copy_cmd[cmd.size()] = 0;
+
+    m_cmd = smash.CreateCommand(copy_cmd);
     m_outPutFile = _trim(file);
 }
 
