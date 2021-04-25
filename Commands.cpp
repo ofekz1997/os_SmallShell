@@ -728,12 +728,19 @@ void Command::runProcessInForeground(pid_t pid, std::string command)
 void RedirectionCommand::execute() //TODO: ExternalCommand bug
 {
     prepare();
+    cout << typeid(m_cmd).name();
     int temp_stdout_fd = dup(STDOUT);
     if (temp_stdout_fd == -1)
     {
         _smashPError("dup");
         return;
     }
+    if (close(STDOUT) == -1)
+    {
+        _smashPError("close");
+        return;
+    }
+
 
     int flags = O_RDWR | O_CREAT;
     if (m_isAppend)
@@ -745,7 +752,7 @@ void RedirectionCommand::execute() //TODO: ExternalCommand bug
         flags = flags | O_TRUNC;
     }
 
-    int fd_out = open(m_outPutFile.c_str(), flags, S_IRWXU | S_IRWXG | S_IRWXO);
+    int fd_out = open(m_outPutFile.c_str(), flags, S_IRUSR | S_IWUSR | S_IWGRP | S_IRGRP | S_IROTH | S_IWOTH);
 
     if (fd_out == -1)
     {
@@ -753,21 +760,6 @@ void RedirectionCommand::execute() //TODO: ExternalCommand bug
         return;
     }
 
-    if (close(STDOUT) == -1)
-    {
-        _smashPError("close");
-        return;
-    }
-    if (dup(fd_out) == -1)
-    {
-        _smashPError("dup");
-        return;
-    }
-    if (close(fd_out) == -1)
-    {
-        _smashPError("close");
-        return;
-    }
 
     m_cmd->execute();
 
@@ -787,6 +779,7 @@ void RedirectionCommand::execute() //TODO: ExternalCommand bug
         return;
     }
 }
+
 
 void RedirectionCommand::prepare()
 {
