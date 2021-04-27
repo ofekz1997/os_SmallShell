@@ -757,7 +757,11 @@ void RedirectionCommand::execute()
         return;
     }
 
+<<<<<<< HEAD
     SmallShell::getInstance().executeCommand(m_cmd.c_str());
+=======
+    m_cmd->execute();
+>>>>>>> 44d76cecf6ac6c8670890682e48cabecd2e7f4c9
 
     if (close(STDOUT) == -1)
     {
@@ -798,6 +802,19 @@ void RedirectionCommand::prepare()
     }
 
     file = s.substr(pos, s.size());
+<<<<<<< HEAD
+=======
+
+    SmallShell &smash = SmallShell::getInstance();
+    char *copy_cmd = new char[cmd.size() + 1];
+    for (size_t i = 0; i < cmd.size(); i++)
+    {
+        copy_cmd[i] = cmd[i];
+    }
+    copy_cmd[cmd.size()] = 0;
+
+    m_cmd = smash.CreateCommand(copy_cmd);
+>>>>>>> 44d76cecf6ac6c8670890682e48cabecd2e7f4c9
     m_outPutFile = _trim(file);
 }
 

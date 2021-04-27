@@ -77,6 +77,7 @@ public:
 
 class RedirectionCommand : public Command
 {
+
     std::string m_cmd;
     std::string m_outPutFile;
     bool m_isAppend;
@@ -85,6 +86,7 @@ public:
     explicit RedirectionCommand(const char *cmd_line)
         : Command(cmd_line), m_cmd(""), m_outPutFile(""), m_isAppend(false) {prepare();}
     virtual ~RedirectionCommand() {}
+
     void execute() override;
     void prepare();
     //void cleanup() override {}
