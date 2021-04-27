@@ -115,7 +115,7 @@ Command *SmallShell::CreateCommand(const char *cmd_line)
     string cmd_s = _trim(string(cmd_line));
     string firstWord = cmd_s.substr(0, cmd_s.find_first_of(" \n"));
 
-    Command* cmd = nullptr;
+    Command *cmd = nullptr;
     if (cmd_s.find(">") != std::string::npos)
     {
         cmd = new RedirectionCommand(cmd_line);
@@ -433,11 +433,9 @@ void QuitCommand::execute()
     }
     else
     {
-        while (wait(NULL) != -1)
-            ;
+        while (wait(NULL) != -1);
     }
-
-    exit(0);
+    SmallShell::getInstance().cleanup(this);
 
     //TDO: vcheck how to exit smash
 }
@@ -622,6 +620,7 @@ JobsList::JobEntry *JobsList::getLastStoppedJob(int *jobId)
 }
 void ExternalCommand::execute()
 {
+    cout << m_cmd_line << endl;
     pid_t pid = fork();
 
     if (pid == 0)
@@ -725,13 +724,18 @@ void Command::runProcessInForeground(pid_t pid, std::string command)
     smash.m_currForegroundCommand = "";
 }
 
-void RedirectionCommand::execute() //TODO: ExternalCommand bug
+void RedirectionCommand::execute() 
 {
-    prepare();
+    
     int temp_stdout_fd = dup(STDOUT);
     if (temp_stdout_fd == -1)
     {
         _smashPError("dup");
+        return;
+    }
+    if (close(STDOUT) == -1)
+    {
+        _smashPError("close");
         return;
     }
 
@@ -745,7 +749,7 @@ void RedirectionCommand::execute() //TODO: ExternalCommand bug
         flags = flags | O_TRUNC;
     }
 
-    int fd_out = open(m_outPutFile.c_str(), flags, S_IRWXU | S_IRWXG | S_IRWXO);
+    int fd_out = open(m_outPutFile.c_str(), flags, S_IRUSR | S_IWUSR | S_IWGRP | S_IRGRP | S_IROTH | S_IWOTH);
 
     if (fd_out == -1)
     {
@@ -753,23 +757,7 @@ void RedirectionCommand::execute() //TODO: ExternalCommand bug
         return;
     }
 
-    if (close(STDOUT) == -1)
-    {
-        _smashPError("close");
-        return;
-    }
-    if (dup(fd_out) == -1)
-    {
-        _smashPError("dup");
-        return;
-    }
-    if (close(fd_out) == -1)
-    {
-        _smashPError("close");
-        return;
-    }
-
-    m_cmd->execute();
+    SmallShell::getInstance().executeCommand(m_cmd.c_str());
 
     if (close(STDOUT) == -1)
     {
@@ -792,12 +780,11 @@ void RedirectionCommand::prepare()
 {
     std::string s(m_cmd_line);
     std::string delimiter = ">";
-    std::string cmd;
     std::string file;
 
     size_t pos = 0;
     pos = s.find_first_of(delimiter);
-    cmd = s.substr(0, pos);
+    m_cmd = s.substr(0, pos);
     ++pos;
 
     if (s[pos] == '>')
@@ -811,9 +798,6 @@ void RedirectionCommand::prepare()
     }
 
     file = s.substr(pos, s.size());
-
-    SmallShell &smash = SmallShell::getInstance();
-    m_cmd = smash.CreateCommand(cmd.c_str());
     m_outPutFile = _trim(file);
 }
 

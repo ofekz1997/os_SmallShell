@@ -53,18 +53,19 @@ class JobsList;
 class ExternalCommand : public Command
 {
     JobsList *m_jobs;
+
 public:
     ExternalCommand(const char *cmd_line, JobsList *jobs) : Command(cmd_line), m_jobs(jobs)
     {
     }
-    virtual ~ExternalCommand(){}
+    virtual ~ExternalCommand() {}
     void execute() override;
 };
 
 class PipeCommand : public Command
 {
-    Command* m_cmd1;
-    Command* m_cmd2;
+    Command *m_cmd1;
+    Command *m_cmd2;
     bool m_isErr;
 
 public:
@@ -76,13 +77,16 @@ public:
 
 class RedirectionCommand : public Command
 {
-    Command * m_cmd;
+
+    std::string m_cmd;
     std::string m_outPutFile;
     bool m_isAppend;
 
 public:
-    explicit RedirectionCommand(const char *cmd_line) : Command(cmd_line) {}
-    virtual ~RedirectionCommand() { delete m_cmd; }
+    explicit RedirectionCommand(const char *cmd_line)
+        : Command(cmd_line), m_cmd(""), m_outPutFile(""), m_isAppend(false) {prepare();}
+    virtual ~RedirectionCommand() {}
+
     void execute() override;
     void prepare();
     //void cleanup() override {}
@@ -96,8 +100,7 @@ private:
 
 public:
     // TODO: Add your data members public:
-    ChangeDirCommand(const char *cmd_line, std::string *plastPwd):
-                    BuiltInCommand(cmd_line), m_plastPwd(plastPwd){}
+    ChangeDirCommand(const char *cmd_line, std::string *plastPwd) : BuiltInCommand(cmd_line), m_plastPwd(plastPwd) {}
     virtual ~ChangeDirCommand() {}
     void execute() override;
 };
@@ -122,7 +125,6 @@ public:
     void execute() override;
 };
 
-
 class JobsList
 {
 public:
@@ -136,8 +138,7 @@ public:
         bool m_isStopped;
 
     public:
-        JobEntry(std::string cmd, pid_t pid, time_t start, int jobId, bool isStopped = false) :
-                m_cmd(cmd), m_pid(pid), m_start(start), m_jobId(jobId), m_isStopped(isStopped) {}
+        JobEntry(std::string cmd, pid_t pid, time_t start, int jobId, bool isStopped = false) : m_cmd(cmd), m_pid(pid), m_start(start), m_jobId(jobId), m_isStopped(isStopped) {}
         std::string getCommand() { return m_cmd; }
         pid_t getPid() { return m_pid; }
         time_t getStartTime() { return m_start; }
@@ -218,9 +219,9 @@ public:
 class QuitCommand : public BuiltInCommand
 {
     JobsList *m_jobs;
+
 public:
-    QuitCommand(const char *cmd_line, JobsList *jobs) :
-                BuiltInCommand(cmd_line), m_jobs(jobs) {}
+    QuitCommand(const char *cmd_line, JobsList *jobs) : BuiltInCommand(cmd_line), m_jobs(jobs) {}
     virtual ~QuitCommand() {}
     void execute() override;
 };
@@ -260,6 +261,11 @@ public:
         static SmallShell instance; // Guaranteed to be destroyed.
         // Instantiated on first use.
         return instance;
+    }
+    void cleanup(Command* cmd)
+    {
+        delete cmd;
+        exit(0);
     }
 
     ~SmallShell();
