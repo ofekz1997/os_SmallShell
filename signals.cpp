@@ -6,30 +6,36 @@
 
 using namespace std;
 
-
-
-
 void ctrlZHandler(int sig_num)
 {
-  cout << "smash: got Ctrl-Z" << endl;
-  SmallShell& smash = SmallShell::getInstance();
-  if (smash.m_currForegroundProcess != -1)
-  {
-    int result = kill(smash.m_currForegroundProcess, SIGSTOP);
-    if (result == -1)
+    cout << "smash: got Ctrl-Z" << endl;
+    SmallShell &smash = SmallShell::getInstance();
+    if (smash.m_currForegroundProcess != -1)
     {
-      _smashPError("kill");
-      return;
+        int result = 0;
+        DO_SYS(result, kill(smash.m_currForegroundProcess, SIGSTOP));
+
+        cout << "smash: process " << smash.m_currForegroundProcess << " was stopped" << endl;
+
+        JobsList::JobEntry *job_entry = smash.m_jobs.getJobByPid(smash.m_currForegroundProcess);
+        time_t curTime = 0;
+        DO_SYS(curTime,time(nullptr));
+        
+        if (job_entry == nullptr)
+        {
+            smash.m_jobs.addJob(smash.m_currForegroundCommand, smash.m_currForegroundProcess, curTime, true);
+        }
+        else
+        {
+            job_entry->setStopped(true);
+            job_entry->setFg(false);
+            job_entry->setTime(curTime);
+        }
+
+        smash.m_currForegroundProcess = -1;
+        smash.m_currForegroundCommand = "";
     }
-    else
-    {
-      cout << "smash: process " << smash.m_currForegroundProcess << " was stopped" << endl;
-      smash.m_jobs.addJob(smash.m_currForegroundCommand, smash.m_currForegroundProcess, time(nullptr), true);
-      smash.m_currForegroundProcess = -1;
-      smash.m_currForegroundCommand = "";
-    }
-  }
-  return;
+    return;
 }
 
 void ctrlCHandler(int sig_num)
@@ -38,18 +44,12 @@ void ctrlCHandler(int sig_num)
   SmallShell& smash = SmallShell::getInstance();
   if (smash.m_currForegroundProcess != -1)
   {
-    int result = kill(smash.m_currForegroundProcess, SIGKILL);
-    if (result == -1)
-    {
-      _smashPError("kill");
-      return;
-    }
-    else
-    {
-      cout << "smash: process " << smash.m_currForegroundProcess << " was killed" << endl;
-      smash.m_currForegroundProcess = -1;
-      smash.m_currForegroundCommand = "";
-    }
+    int ret;
+    DO_SYS(ret, kill(smash.m_currForegroundProcess, SIGKILL));
+
+    cout << "smash: process " << smash.m_currForegroundProcess << " was killed" << endl;
+    smash.m_currForegroundProcess = -1;
+    smash.m_currForegroundCommand = "";
   }
 }
 

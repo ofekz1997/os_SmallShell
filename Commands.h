@@ -4,6 +4,18 @@
 #include <vector>
 #include <fcntl.h>
 
+#define DO_SYS(ret, cmd)                  \
+    do                                    \
+    {                                     \
+        /* safely invoke a system call */ \
+        (ret) = (cmd);                    \
+        if ((ret) == -1)                  \
+        {                                 \
+            _smashPError(#cmd);           \
+            return;                       \
+        }                                 \
+    } while (0)
+
 #define COMMAND_ARGS_MAX_LENGTH (200)
 #define COMMAND_MAX_ARGS (20)
 #define DEFAULT_PROMPT "smash> "
@@ -19,7 +31,7 @@ static void _printErrorToScreen(std::string command, std::string error_msg)
 
 static void _smashPError(std::string syscall)
 {
-    std::string msg = "smash error: " + syscall + " failed";
+    std::string msg = "smash error: " + syscall.substr(0,syscall.find('(')) + " failed";
     perror(msg.c_str());
 }
 
@@ -136,15 +148,20 @@ public:
         time_t m_start;
         int m_jobId;
         bool m_isStopped;
+        bool m_isFg;
 
     public:
-        JobEntry(std::string cmd, pid_t pid, time_t start, int jobId, bool isStopped = false) : m_cmd(cmd), m_pid(pid), m_start(start), m_jobId(jobId), m_isStopped(isStopped) {}
+        JobEntry(std::string cmd, pid_t pid, time_t start, int jobId, bool isStopped = false, bool isFg = false)
+            : m_cmd(cmd), m_pid(pid), m_start(start), m_jobId(jobId), m_isStopped(isStopped), m_isFg(isFg) {}
         std::string getCommand() { return m_cmd; }
         pid_t getPid() { return m_pid; }
         time_t getStartTime() { return m_start; }
+        void setTime(time_t time) { m_start = time;}
         bool isStopped() { return m_isStopped; }
         void setStopped(bool flag) { m_isStopped = flag; }
         int getJobId() { return m_jobId; }
+        bool isFg() { return m_isFg; }
+        void setFg(bool flag) { m_isFg = flag; }
     };
 
     // TODO: Add your data members
@@ -158,6 +175,7 @@ public:
     void removeJobById(int jobId);
     JobEntry *getLastJob(int *lastJobId);
     JobEntry *getLastStoppedJob(int *jobId);
+    JobEntry *getJobByPid(int pid);
     // TODO: Add extra methods or modify exisitng ones as needed
 private:
     std::vector<JobEntry *> m_jobEntries;
