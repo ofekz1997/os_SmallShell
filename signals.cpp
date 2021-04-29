@@ -55,5 +55,34 @@ void ctrlCHandler(int sig_num)
 
 void alarmHandler(int sig_num)
 {
-    // TODO: Add your implementation
+    cout << "smash: got an alarm" << endl;
+    SmallShell &smash = SmallShell::getInstance();
+    time_t cur_time;
+    DO_SYS(cur_time, time(nullptr));
+
+    list<AlarmData> to_remove;
+
+    for (AlarmData data : smash.m_alarm)
+    {
+        if (difftime(cur_time, data.start_time) >= data.duration)
+        {
+            if (data.pid == smash.m_currForegroundProcess)
+            {
+                smash.m_currForegroundProcess = -1;
+                smash.m_currForegroundCommand = "";
+            }
+
+            int ret;
+            cout << "smash: " << data.command << " timed out!" << endl;
+            DO_SYS(ret, kill(data.pid, SIGKILL));
+
+            to_remove.push_back(data);
+        }
+    }
+
+    for (AlarmData data : to_remove)
+    {
+        smash.m_alarm.remove(data);
+    }
+    SmallShell::getInstance().setAlarm();
 }
