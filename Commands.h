@@ -258,18 +258,16 @@ public:
     void execute() override;
 };
 
-
-
 struct AlarmData
 {
     std::string command;
     time_t start_time;
     int duration;
     pid_t pid;
-    bool operator==(const AlarmData& data)
+    bool operator==(const AlarmData &data)
     {
-        return (command == data.command) && (start_time==data.start_time) &&
-                         (duration==data.duration) && (pid == data.pid);
+        return (command == data.command) && (start_time == data.start_time) &&
+               (duration == data.duration) && (pid == data.pid);
     }
 };
 
