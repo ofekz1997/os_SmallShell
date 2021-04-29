@@ -1,15 +1,4 @@
-#include <unistd.h>
-#include <string.h>
-#include <iostream>
-#include <vector>
-#include <sstream>
-#include <sys/wait.h>
-#include <iomanip>
-#include "Commands.h"
-#include <stdio.h>
-#include <stdlib.h>
-#include <sys/wait.h>
-#include <iomanip>
+
 #include "Commands.h"
 
 #define PACKET_SIZE 1024
@@ -232,8 +221,7 @@ BuiltInCommand::BuiltInCommand(const char *cmd_line) : Command(cmd_line), m_args
 void ChangePromptCommand::execute()
 {
     SmallShell &smash = SmallShell::getInstance();
-    string str = string(m_args[1]);
-    if (str.empty() || str.compare("") == 0 || str.compare("&") == 0)
+    if (m_args.size() == 1)
     {
         smash.SetPrompt(DEFAULT_PROMPT);
     }
@@ -503,7 +491,7 @@ void JobsList::killAllJobs()
             num++;
         }
     }
-    std::cout << "smash: sending SIGKILL signal to " << num << "jobs:" << std::endl;
+    std::cout << "smash: sending SIGKILL signal to " << num << " jobs:" << std::endl;
     for (JobEntry *job : m_jobEntries)
     {
         if (job == nullptr)

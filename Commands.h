@@ -1,7 +1,15 @@
 #ifndef SMASH_COMMAND_H_
 #define SMASH_COMMAND_H_
 
+#include <unistd.h>
+#include <string.h>
+#include <iostream>
 #include <vector>
+#include <sstream>
+//#include <iomanip>
+//#include <stdio.h>
+//#include <stdlib.h>
+#include <sys/wait.h>
 #include <fcntl.h>
 #include <list>
 
