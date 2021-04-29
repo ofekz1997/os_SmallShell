@@ -3,6 +3,7 @@
 
 #include <vector>
 #include <fcntl.h>
+#include <list>
 
 #define DO_SYS(ret, cmd)                  \
     do                                    \
@@ -257,6 +258,21 @@ public:
     void execute() override;
 };
 
+
+
+struct AlarmData
+{
+    std::string command;
+    time_t start_time;
+    int duration;
+    pid_t pid;
+    bool operator==(const AlarmData& data)
+    {
+        return (command == data.command) && (start_time==data.start_time) &&
+                         (duration==data.duration) && (pid == data.pid);
+    }
+};
+
 class SmallShell
 {
 private:
@@ -269,6 +285,7 @@ public:
     pid_t m_currForegroundProcess = -1;
     std::string m_currForegroundCommand = "";
     JobsList m_jobs;
+    std::list<AlarmData> m_alarm;
 
     Command *CreateCommand(const char *cmd_line);
     SmallShell(SmallShell const &) = delete;     // disable copy ctor
@@ -276,6 +293,8 @@ public:
 
     void SetPrompt(const std::string &prompt);
     const std::string &GetPrompt();
+
+    void setAlarm();
 
     static SmallShell &getInstance() // make SmallShell singleton
     {

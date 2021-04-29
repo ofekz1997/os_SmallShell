@@ -104,6 +104,24 @@ const std::string &SmallShell::GetPrompt()
     return m_prompt;
 }
 
+void SmallShell::setAlarm()
+{
+    time_t curTime = 0;
+    int min = INT32_MAX;
+    int diff = 0;
+    DO_SYS(curTime, time(nullptr));
+    for (AlarmData data : m_alarm)
+    {
+        diff = difftime(data.start_time + data.duration, curTime);
+        if (diff < min)
+        {
+            min = diff;
+        }
+    }
+    int ret = 0;
+    DO_SYS(ret, alarm(min));
+}
+
 SmallShell::~SmallShell()
 {
     // TODO: add your implementation
@@ -179,7 +197,7 @@ void SmallShell::executeCommand(const char *cmd_line)
     SmallShell::getInstance().m_jobs.removeFinishedJobs();
     Command *cmd = CreateCommand(cmd_line);
     cmd->execute();
-    //   delete cmd;
+    delete cmd;
 }
 
 BuiltInCommand::BuiltInCommand(const char *cmd_line) : Command(cmd_line), m_args()
@@ -508,7 +526,7 @@ void JobsList::removeFinishedJobs()
 
         if (ret > 0) //finished
         {
-            if (WIFEXITED(stat))
+            if (WIFEXITED(stat) || WIFSIGNALED(stat))
             {
                 if (i == m_maxJobId)
                 {
@@ -605,15 +623,31 @@ JobsList::JobEntry *JobsList::getJobByPid(int pid)
 
 void ExternalCommand::execute()
 {
+    _trim(m_cmd_line);
+    string sCmd = m_cmd_line;
+
+    bool isTimeOut = false;
+    AlarmData alarm;
+
+    if (sCmd.substr(0, sCmd.find_first_of(WHITESPACE)) == "timeout")
+    {
+        isTimeOut = true;
+
+        alarm.command = sCmd;
+
+        sCmd = sCmd.substr(sCmd.find_first_of(WHITESPACE));
+        sCmd = _trim(sCmd);
+        alarm.duration = atoi(sCmd.substr(0, sCmd.find_first_of(WHITESPACE)).c_str());
+
+        sCmd = _trim(sCmd);
+        sCmd = sCmd.substr(sCmd.find_first_of(WHITESPACE));
+        
+        DO_SYS(alarm.start_time, time(nullptr));
+    }
+
     pid_t pid;
     int ret;
-    int size = 0;
-    const char *s = m_cmd_line;
-    while (s[size] != 0)
-    {
-        size++;
-    }
-    size++;
+    int size = sCmd.size() + 1;
 
     DO_SYS(pid, fork());
 
@@ -622,7 +656,7 @@ void ExternalCommand::execute()
         DO_SYS(ret, setpgrp());
 
         char *const cmd = (char *)malloc(sizeof(char) * size);
-        memcpy(cmd, m_cmd_line, sizeof(char) * size);
+        memcpy(cmd, sCmd.c_str(), sizeof(char) * size);
         _removeBackgroundSign(cmd);
 
         char bash[] = {"bash"};
@@ -635,6 +669,13 @@ void ExternalCommand::execute()
     }
     else if (pid > 0)
     {
+        if (isTimeOut)
+        {
+            alarm.pid = pid;
+            SmallShell::getInstance().m_alarm.push_back(alarm);
+            SmallShell::getInstance().setAlarm();
+        }
+
         if (_isBackgroundComamnd(m_cmd_line))
         {
             m_jobs->addJob(this->getString(), pid, time(nullptr));
@@ -645,6 +686,7 @@ void ExternalCommand::execute()
         }
     }
 }
+
 void CatCommand::execute()
 {
     if (m_args.size() == 1)
@@ -807,34 +849,34 @@ void PipeCommand::execute()
 
     int pid_cmd_1 = -1;
     int pid_cmd_2 = -1;
-    
+
     DO_SYS(pid_cmd_1, fork());
     if (pid_cmd_1 == 0)
     { // cmd1
         int fd = m_isErr ? STDERR : STDOUT;
-        DO_SYS(ret,close(fd));
-        DO_SYS(ret,close(my_pipe[0]));
-        DO_SYS(ret,dup(my_pipe[1]));
-        DO_SYS(ret,close(my_pipe[1]));
+        DO_SYS(ret, close(fd));
+        DO_SYS(ret, close(my_pipe[0]));
+        DO_SYS(ret, dup(my_pipe[1]));
+        DO_SYS(ret, close(my_pipe[1]));
         SmallShell::getInstance().executeCommand(m_cmd1.c_str());
-        DO_SYS(ret,close(fd)); 
+        DO_SYS(ret, close(fd));
     }
     else
     { // smash
         DO_SYS(pid_cmd_2, fork());
         if (pid_cmd_2 == 0)
         { // cmd2
-            DO_SYS(ret,close(my_pipe[1]));
-            DO_SYS(ret,close(STDIN));
-            DO_SYS(ret,dup(my_pipe[0]));
-            DO_SYS(ret,close(my_pipe[0]));
+            DO_SYS(ret, close(my_pipe[1]));
+            DO_SYS(ret, close(STDIN));
+            DO_SYS(ret, dup(my_pipe[0]));
+            DO_SYS(ret, close(my_pipe[0]));
             SmallShell::getInstance().executeCommand(m_cmd2.c_str());
-            DO_SYS(ret,close(STDIN));
+            DO_SYS(ret, close(STDIN));
         }
         else
         {
-            DO_SYS(ret,close(my_pipe[0]));
-            DO_SYS(ret,close(my_pipe[1]));
+            DO_SYS(ret, close(my_pipe[0]));
+            DO_SYS(ret, close(my_pipe[1]));
         }
     }
 
@@ -845,7 +887,7 @@ void PipeCommand::execute()
     else
     {
 
-        DO_SYS(ret,waitpid(pid_cmd_1, nullptr, 0));
-        DO_SYS(ret,waitpid(pid_cmd_2, nullptr, 0));
+        DO_SYS(ret, waitpid(pid_cmd_1, nullptr, 0));
+        DO_SYS(ret, waitpid(pid_cmd_2, nullptr, 0));
     }
 }
