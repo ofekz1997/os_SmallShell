@@ -106,20 +106,35 @@ const std::string &SmallShell::GetPrompt()
 
 void SmallShell::setAlarm()
 {
+    list<AlarmData> to_remove;
     time_t curTime = 0;
     int min = INT32_MAX;
     int diff = 0;
     DO_SYS(curTime, time(nullptr));
+
     for (AlarmData data : m_alarm)
     {
         diff = difftime(data.start_time + data.duration, curTime);
+        if(diff < 0)
+        {
+            to_remove.push_back(data);
+            continue;
+        }
         if (diff < min)
         {
             min = diff;
         }
     }
+    for (AlarmData data : to_remove)
+    {
+        SmallShell::getInstance().m_alarm.remove(data);
+    }
     int ret = 0;
-    DO_SYS(ret, alarm(min));
+    if(min != INT32_MAX)
+    {
+        DO_SYS(ret, alarm(min));
+    }
+    
 }
 SmallShell::~SmallShell()
 {
