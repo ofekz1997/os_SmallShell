@@ -1,5 +1,4 @@
-#TODO: replace ID with your own IDS, for example: 123456789_123456789
-SUBMITTERS := <student1-ID>_<student2-ID>
+SUBMITTERS := 318179652_312145782
 COMPILER := g++
 COMPILER_FLAGS := --std=c++11 -Wall
 SRCS := Commands.cpp signals.cpp smash.cpp

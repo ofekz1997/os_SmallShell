@@ -43,16 +43,13 @@ class Command
 {
 protected:
     const char *m_cmd_line;
-    // TODO: Add your data members
+
 public:
     Command(const char *cmd_line) : m_cmd_line(cmd_line) {}
     virtual ~Command() {}
     virtual void execute() = 0;
     std::string getString() { return m_cmd_line; }
     static void runProcessInForeground(pid_t pid, std::string command);
-    //virtual void prepare();
-    //virtual void cleanup();
-    // TODO: Add your extra methods if needed
 };
 
 class BuiltInCommand : public Command
@@ -115,7 +112,6 @@ private:
     std::string *m_plastPwd;
 
 public:
-    // TODO: Add your data members public:
     ChangeDirCommand(const char *cmd_line, std::string *plastPwd) : BuiltInCommand(cmd_line), m_plastPwd(plastPwd) {}
     virtual ~ChangeDirCommand() {}
     void execute() override;
@@ -168,7 +164,6 @@ public:
         void setFg(bool flag) { m_isFg = flag; }
     };
 
-    // TODO: Add your data members
     JobsList();
     ~JobsList();
     void addJob(std::string cmd, pid_t pid, time_t time, bool isStopped = false);
@@ -180,7 +175,7 @@ public:
     JobEntry *getLastJob(int *lastJobId);
     JobEntry *getLastStoppedJob(int *jobId);
     JobEntry *getJobByPid(int pid);
-    // TODO: Add extra methods or modify exisitng ones as needed
+
 private:
     std::vector<JobEntry *> m_jobEntries;
     int m_maxJobId;
@@ -210,7 +205,6 @@ public:
 
 class ForegroundCommand : public BuiltInCommand
 {
-    // TODO: Add your data members
     JobsList *m_jobs;
 
 public:
@@ -221,7 +215,6 @@ public:
 
 class BackgroundCommand : public BuiltInCommand
 {
-    // TODO: Add your data members
     JobsList *m_jobs;
 
 public:
@@ -274,14 +267,13 @@ struct AlarmData
 class SmallShell
 {
 private:
-    // TODO: Add your data members
     std::string m_oldpwd;
     std::string m_prompt;
     SmallShell();
 
 public:
-    pid_t m_currForegroundProcess = -1;
-    std::string m_currForegroundCommand = "";
+    pid_t m_currForegroundProcess;
+    std::string m_currForegroundCommand;
     JobsList m_jobs;
     std::list<AlarmData> m_alarm;
 
@@ -308,7 +300,6 @@ public:
 
     ~SmallShell();
     void executeCommand(const char *cmd_line);
-    // TODO: add extra methods as needed
 };
 
 #endif //SMASH_COMMAND_H_

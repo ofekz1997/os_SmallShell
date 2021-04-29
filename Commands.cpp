@@ -89,11 +89,8 @@ void _removeBackgroundSign(char *cmd_line)
     cmd_line[str.find_last_not_of(WHITESPACE, idx) + 1] = 0;
 }
 
-// TODO: Add your implementation for classes in Commands.h
-
-SmallShell::SmallShell() : m_oldpwd(""), m_prompt(DEFAULT_PROMPT), m_jobs()
+SmallShell::SmallShell() : m_oldpwd(""), m_prompt(DEFAULT_PROMPT), m_currForegroundProcess(-1), m_currForegroundCommand(""), m_jobs(), m_alarm()
 {
-    // TODO: add your implementation
 }
 void SmallShell::SetPrompt(const std::string &prompt)
 {
@@ -106,24 +103,37 @@ const std::string &SmallShell::GetPrompt()
 
 void SmallShell::setAlarm()
 {
+    list<AlarmData> to_remove;
     time_t curTime = 0;
     int min = INT32_MAX;
     int diff = 0;
     DO_SYS(curTime, time(nullptr));
+
     for (AlarmData data : m_alarm)
     {
         diff = difftime(data.start_time + data.duration, curTime);
+        if (diff < 0)
+        {
+            to_remove.push_back(data);
+            continue;
+        }
         if (diff < min)
         {
             min = diff;
         }
     }
+    for (AlarmData data : to_remove)
+    {
+        SmallShell::getInstance().m_alarm.remove(data);
+    }
     int ret = 0;
-    DO_SYS(ret, alarm(min));
+    if (min != INT32_MAX)
+    {
+        DO_SYS(ret, alarm(min));
+    }
 }
 SmallShell::~SmallShell()
 {
-    // TODO: add your implementation
 }
 /**
 * Creates and returns a pointer to Command class which matches the given command line (cmd_line)
@@ -415,8 +425,6 @@ void BackgroundCommand::execute()
 
     job->setStopped(false);
     FUNC_EXIT()
-
-    //TODO: check if we need o add & to the end of the command
 }
 
 void QuitCommand::execute()

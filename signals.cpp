@@ -46,15 +46,6 @@ void ctrlCHandler(int sig_num)
     {
         int ret;
 
-        for (AlarmData data : smash.m_alarm)
-        {
-            if (data.pid == smash.m_currForegroundProcess)
-            {
-                smash.m_alarm.remove(data);
-                break;
-            }
-        }
-
         DO_SYS(ret, kill(smash.m_currForegroundProcess, SIGKILL));
 
         cout << "smash: process " << smash.m_currForegroundProcess << " was killed" << endl;
@@ -83,9 +74,12 @@ void alarmHandler(int sig_num)
             }
 
             int ret;
-            cout << "smash: " << data.command << " timed out!" << endl;
-            DO_SYS(ret, kill(data.pid, SIGKILL));
-
+            smash.m_jobs.removeFinishedJobs();
+            if (smash.m_jobs.getJobByPid(data.pid) != nullptr)
+            {
+                cout << "smash: " << data.command << " timed out!" << endl;
+                DO_SYS(ret, kill(data.pid, SIGKILL));
+            }
             to_remove.push_back(data);
         }
     }
@@ -94,5 +88,5 @@ void alarmHandler(int sig_num)
     {
         smash.m_alarm.remove(data);
     }
-    SmallShell::getInstance().setAlarm();
+    smash.setAlarm();
 }
