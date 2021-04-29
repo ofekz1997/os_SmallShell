@@ -45,6 +45,16 @@ void ctrlCHandler(int sig_num)
     if (smash.m_currForegroundProcess != -1)
     {
         int ret;
+
+        for (AlarmData data : smash.m_alarm)
+        {
+            if (data.pid == smash.m_currForegroundProcess)
+            {
+                smash.m_alarm.remove(data);
+                break;
+            }
+        }
+
         DO_SYS(ret, kill(smash.m_currForegroundProcess, SIGKILL));
 
         cout << "smash: process " << smash.m_currForegroundProcess << " was killed" << endl;

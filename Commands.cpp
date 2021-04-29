@@ -121,7 +121,6 @@ void SmallShell::setAlarm()
     int ret = 0;
     DO_SYS(ret, alarm(min));
 }
-
 SmallShell::~SmallShell()
 {
     // TODO: add your implementation
@@ -641,7 +640,7 @@ void ExternalCommand::execute()
 
         sCmd = _trim(sCmd);
         sCmd = sCmd.substr(sCmd.find_first_of(WHITESPACE));
-        
+
         DO_SYS(alarm.start_time, time(nullptr));
     }
 
@@ -836,7 +835,7 @@ void PipeCommand::prepare()
     char *tempCmd2 = (char *)malloc(sizeof(char) * COMMAND_ARGS_MAX_LENGTH);
     memcpy(tempCmd2, cmd2.c_str(), sizeof(char) * COMMAND_ARGS_MAX_LENGTH);
     _removeBackgroundSign(tempCmd2);
-    m_cmd2 = tempCmd1;
+    m_cmd2 = tempCmd2;
     free(tempCmd2);
 }
 
@@ -886,7 +885,6 @@ void PipeCommand::execute()
     }
     else
     {
-
         DO_SYS(ret, waitpid(pid_cmd_1, nullptr, 0));
         DO_SYS(ret, waitpid(pid_cmd_2, nullptr, 0));
     }
