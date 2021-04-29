@@ -19,8 +19,8 @@ void ctrlZHandler(int sig_num)
 
         JobsList::JobEntry *job_entry = smash.m_jobs.getJobByPid(smash.m_currForegroundProcess);
         time_t curTime = 0;
-        DO_SYS(curTime,time(nullptr));
-        
+        DO_SYS(curTime, time(nullptr));
+
         if (job_entry == nullptr)
         {
             smash.m_jobs.addJob(smash.m_currForegroundCommand, smash.m_currForegroundProcess, curTime, true);
@@ -40,20 +40,20 @@ void ctrlZHandler(int sig_num)
 
 void ctrlCHandler(int sig_num)
 {
-  cout << "smash: got Ctrl-C" << endl;
-  SmallShell& smash = SmallShell::getInstance();
-  if (smash.m_currForegroundProcess != -1)
-  {
-    int ret;
-    DO_SYS(ret, kill(smash.m_currForegroundProcess, SIGKILL));
+    cout << "smash: got Ctrl-C" << endl;
+    SmallShell &smash = SmallShell::getInstance();
+    if (smash.m_currForegroundProcess != -1)
+    {
+        int ret;
+        DO_SYS(ret, kill(smash.m_currForegroundProcess, SIGKILL));
 
-    cout << "smash: process " << smash.m_currForegroundProcess << " was killed" << endl;
-    smash.m_currForegroundProcess = -1;
-    smash.m_currForegroundCommand = "";
-  }
+        cout << "smash: process " << smash.m_currForegroundProcess << " was killed" << endl;
+        smash.m_currForegroundProcess = -1;
+        smash.m_currForegroundCommand = "";
+    }
 }
 
 void alarmHandler(int sig_num)
 {
-  // TODO: Add your implementation
+    // TODO: Add your implementation
 }

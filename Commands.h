@@ -19,8 +19,11 @@
 #define COMMAND_ARGS_MAX_LENGTH (200)
 #define COMMAND_MAX_ARGS (20)
 #define DEFAULT_PROMPT "smash> "
-#define STDOUT 1
+
 #define STDIN 0
+#define STDOUT 1
+#define STDERR 2
+
 #define MAX_JOBS 100
 const std::string WHITESPACE = " \n\r\t\f\v";
 
@@ -31,7 +34,7 @@ static void _printErrorToScreen(std::string command, std::string error_msg)
 
 static void _smashPError(std::string syscall)
 {
-    std::string msg = "smash error: " + syscall.substr(0,syscall.find('(')) + " failed";
+    std::string msg = "smash error: " + syscall.substr(0, syscall.find('(')) + " failed";
     perror(msg.c_str());
 }
 
@@ -76,8 +79,8 @@ public:
 
 class PipeCommand : public Command
 {
-    Command *m_cmd1;
-    Command *m_cmd2;
+    std::string m_cmd1;
+    std::string m_cmd2;
     bool m_isErr;
 
 public:
@@ -96,7 +99,7 @@ class RedirectionCommand : public Command
 
 public:
     explicit RedirectionCommand(const char *cmd_line)
-        : Command(cmd_line), m_cmd(""), m_outPutFile(""), m_isAppend(false) {prepare();}
+        : Command(cmd_line), m_cmd(""), m_outPutFile(""), m_isAppend(false) { prepare(); }
     virtual ~RedirectionCommand() {}
 
     void execute() override;
@@ -156,7 +159,7 @@ public:
         std::string getCommand() { return m_cmd; }
         pid_t getPid() { return m_pid; }
         time_t getStartTime() { return m_start; }
-        void setTime(time_t time) { m_start = time;}
+        void setTime(time_t time) { m_start = time; }
         bool isStopped() { return m_isStopped; }
         void setStopped(bool flag) { m_isStopped = flag; }
         int getJobId() { return m_jobId; }
@@ -280,7 +283,7 @@ public:
         // Instantiated on first use.
         return instance;
     }
-    void cleanup(Command* cmd)
+    void cleanup(Command *cmd)
     {
         delete cmd;
         exit(0);

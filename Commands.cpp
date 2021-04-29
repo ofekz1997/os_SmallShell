@@ -608,8 +608,8 @@ void ExternalCommand::execute()
     pid_t pid;
     int ret;
     int size = 0;
-    const char * s = m_cmd_line;
-    while(s[size]!=0)
+    const char *s = m_cmd_line;
+    while (s[size] != 0)
     {
         size++;
     }
@@ -625,7 +625,6 @@ void ExternalCommand::execute()
         memcpy(cmd, m_cmd_line, sizeof(char) * size);
         _removeBackgroundSign(cmd);
 
-
         char bash[] = {"bash"};
         char c[] = {"-c"};
         char *const args[] = {bash, c, cmd, NULL};
@@ -636,14 +635,14 @@ void ExternalCommand::execute()
     }
     else if (pid > 0)
     {
-            if (_isBackgroundComamnd(m_cmd_line))
-            {
-                m_jobs->addJob(this->getString(), pid, time(nullptr));
-            }
-            else
-            {
-                Command::runProcessInForeground(pid, this->getString());
-            }
+        if (_isBackgroundComamnd(m_cmd_line))
+        {
+            m_jobs->addJob(this->getString(), pid, time(nullptr));
+        }
+        else
+        {
+            Command::runProcessInForeground(pid, this->getString());
+        }
     }
 }
 void CatCommand::execute()
@@ -786,56 +785,56 @@ void PipeCommand::prepare()
 
     cmd2 = s.substr(pos, s.size());
 
-    SmallShell &smash = SmallShell::getInstance();
-
     char *tempCmd1 = (char *)malloc(sizeof(char) * COMMAND_ARGS_MAX_LENGTH);
     memcpy(tempCmd1, cmd1.c_str(), sizeof(char) * COMMAND_ARGS_MAX_LENGTH);
     _removeBackgroundSign(tempCmd1);
+    m_cmd1 = tempCmd1;
+    free(tempCmd1);
 
     char *tempCmd2 = (char *)malloc(sizeof(char) * COMMAND_ARGS_MAX_LENGTH);
     memcpy(tempCmd2, cmd2.c_str(), sizeof(char) * COMMAND_ARGS_MAX_LENGTH);
     _removeBackgroundSign(tempCmd2);
-
-    m_cmd1 = smash.CreateCommand(tempCmd1);
-    m_cmd2 = smash.CreateCommand(tempCmd2);
+    m_cmd2 = tempCmd1;
+    free(tempCmd2);
 }
 
 void PipeCommand::execute()
 {
     prepare();
     int my_pipe[2];
-    int ret;
+    int ret = 0;
     DO_SYS(ret, pipe(my_pipe));
 
     int pid_cmd_1 = -1;
     int pid_cmd_2 = -1;
-
+    
     DO_SYS(pid_cmd_1, fork());
     if (pid_cmd_1 == 0)
     { // cmd1
-        close(my_pipe[0]);
-        close(STDOUT);
-        dup(my_pipe[1]);
-        close(my_pipe[1]);
-        m_cmd1->execute();
-        close(STDOUT);
+        int fd = m_isErr ? STDERR : STDOUT;
+        DO_SYS(ret,close(fd));
+        DO_SYS(ret,close(my_pipe[0]));
+        DO_SYS(ret,dup(my_pipe[1]));
+        DO_SYS(ret,close(my_pipe[1]));
+        SmallShell::getInstance().executeCommand(m_cmd1.c_str());
+        DO_SYS(ret,close(fd)); 
     }
     else
     { // smash
         DO_SYS(pid_cmd_2, fork());
         if (pid_cmd_2 == 0)
         { // cmd2
-            close(my_pipe[1]);
-            close(STDIN);
-            dup(my_pipe[0]);
-            close(my_pipe[0]);
-            m_cmd2->execute();
-            close(STDIN);
+            DO_SYS(ret,close(my_pipe[1]));
+            DO_SYS(ret,close(STDIN));
+            DO_SYS(ret,dup(my_pipe[0]));
+            DO_SYS(ret,close(my_pipe[0]));
+            SmallShell::getInstance().executeCommand(m_cmd2.c_str());
+            DO_SYS(ret,close(STDIN));
         }
         else
         {
-            close(my_pipe[0]);
-            close(my_pipe[1]);
+            DO_SYS(ret,close(my_pipe[0]));
+            DO_SYS(ret,close(my_pipe[1]));
         }
     }
 
@@ -846,7 +845,7 @@ void PipeCommand::execute()
     else
     {
 
-        waitpid(pid_cmd_1, nullptr, 0);
-        waitpid(pid_cmd_2, nullptr, 0);
+        DO_SYS(ret,waitpid(pid_cmd_1, nullptr, 0));
+        DO_SYS(ret,waitpid(pid_cmd_2, nullptr, 0));
     }
 }
