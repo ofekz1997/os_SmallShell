@@ -112,7 +112,7 @@ void SmallShell::setAlarm()
     for (AlarmData data : m_alarm)
     {
         diff = difftime(data.start_time + data.duration, curTime);
-        if (diff < 0)
+        if(diff < 0)
         {
             to_remove.push_back(data);
             continue;
@@ -127,10 +127,11 @@ void SmallShell::setAlarm()
         SmallShell::getInstance().m_alarm.remove(data);
     }
     int ret = 0;
-    if (min != INT32_MAX)
+    if(min != INT32_MAX)
     {
         DO_SYS(ret, alarm(min));
     }
+    
 }
 SmallShell::~SmallShell()
 {
