@@ -98,7 +98,6 @@ public:
 
 class RedirectionCommand : public Command
 {
-
     std::string m_cmd;
     std::string m_outPutFile;
     bool m_isAppend;
