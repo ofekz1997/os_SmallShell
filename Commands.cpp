@@ -1,15 +1,4 @@
-#include <unistd.h>
-#include <string.h>
-#include <iostream>
-#include <vector>
-#include <sstream>
-#include <sys/wait.h>
-#include <iomanip>
-#include "Commands.h"
-#include <stdio.h>
-#include <stdlib.h>
-#include <sys/wait.h>
-#include <iomanip>
+
 #include "Commands.h"
 
 #define PACKET_SIZE 1024
@@ -89,11 +78,12 @@ void _removeBackgroundSign(char *cmd_line)
     cmd_line[str.find_last_not_of(WHITESPACE, idx) + 1] = 0;
 }
 
-// TODO: Add your implementation for classes in Commands.h
 
-SmallShell::SmallShell() : m_oldpwd(""), m_prompt(DEFAULT_PROMPT), m_jobs()
+
+SmallShell::SmallShell() :
+ m_oldpwd(""), m_prompt(DEFAULT_PROMPT), m_currForegroundProcess(-1), m_currForegroundCommand(""), m_jobs(), m_alarm()
 {
-    // TODO: add your implementation
+
 }
 void SmallShell::SetPrompt(const std::string &prompt)
 {
@@ -108,7 +98,7 @@ void SmallShell::setAlarm()
 {
     time_t curTime = 0;
     int min = INT32_MAX;
-    int diff = 0;
+    int diff = INT32_MAX;
     DO_SYS(curTime, time(nullptr));
     for (AlarmData data : m_alarm)
     {
@@ -118,12 +108,16 @@ void SmallShell::setAlarm()
             min = diff;
         }
     }
-    int ret = 0;
-    DO_SYS(ret, alarm(min));
+
+    if (min != INT32_MAX)
+    {
+        int ret = 0;
+        DO_SYS(ret, alarm(min));
+    }
 }
+
 SmallShell::~SmallShell()
 {
-    // TODO: add your implementation
 }
 /**
 * Creates and returns a pointer to Command class which matches the given command line (cmd_line)
@@ -132,7 +126,11 @@ Command *SmallShell::CreateCommand(const char *cmd_line)
 {
     m_jobs.removeFinishedJobs();
     string cmd_s = _trim(string(cmd_line));
-    string firstWord = cmd_s.substr(0, cmd_s.find_first_of(" \n"));
+    string firstWord = cmd_s.substr(0, cmd_s.find_first_of(WHITESPACE));
+    if (firstWord.find('&') != std::string::npos)
+    {
+        firstWord = firstWord.substr(0, firstWord.find('&'));
+    }
 
     Command *cmd = nullptr;
     if (cmd_s.find(">") != std::string::npos)
@@ -193,7 +191,6 @@ Command *SmallShell::CreateCommand(const char *cmd_line)
 
 void SmallShell::executeCommand(const char *cmd_line)
 {
-    SmallShell::getInstance().m_jobs.removeFinishedJobs();
     Command *cmd = CreateCommand(cmd_line);
     cmd->execute();
     delete cmd;
@@ -201,29 +198,28 @@ void SmallShell::executeCommand(const char *cmd_line)
 
 BuiltInCommand::BuiltInCommand(const char *cmd_line) : Command(cmd_line), m_args()
 {
-    char **temp = (char **)malloc(sizeof(char *) * COMMAND_MAX_ARGS);
+    char *temp[COMMAND_MAX_ARGS];
     for (int i = 0; i < COMMAND_MAX_ARGS; i++)
     {
         temp[i] = nullptr;
     }
-    char *tempCmd = (char *)malloc(sizeof(char) * COMMAND_ARGS_MAX_LENGTH);
+
+    char tempCmd[COMMAND_ARGS_MAX_LENGTH];
     memcpy(tempCmd, cmd_line, sizeof(char) * COMMAND_ARGS_MAX_LENGTH);
     _removeBackgroundSign(tempCmd);
     _parseCommandLine(tempCmd, temp);
-    free(tempCmd);
+
     for (int i = 0; i < COMMAND_MAX_ARGS && temp[i] != nullptr; i++)
     {
         m_args.push_back(string(temp[i]));
         free(temp[i]);
     }
-    free(temp);
 }
 
 void ChangePromptCommand::execute()
 {
     SmallShell &smash = SmallShell::getInstance();
-    string str = string(m_args[1]);
-    if (str.empty() || str.compare("") == 0 || str.compare("&") == 0)
+    if (m_args.size() == 1)
     {
         smash.SetPrompt(DEFAULT_PROMPT);
     }
@@ -242,8 +238,9 @@ void ShowPidCommand::execute()
 
 void GetCurrDirCommand::execute()
 {
-    char *pwd = (char *)malloc(COMMAND_ARGS_MAX_LENGTH + 1);
-    pwd = getcwd(pwd, COMMAND_ARGS_MAX_LENGTH + 1);
+    char pwd[PACKET_SIZE * 4];
+
+    getcwd(pwd, PACKET_SIZE * 4);
     if (pwd == nullptr)
     {
         _smashPError("getcwd");
@@ -252,23 +249,23 @@ void GetCurrDirCommand::execute()
     {
         std::cout << pwd << std::endl;
     }
-    free(pwd);
 }
 
 void ChangeDirCommand::_changeDirAndUpdateOldPwd(const std::string newdir)
 {
-    char *pwd = (char *)malloc(COMMAND_ARGS_MAX_LENGTH + 1);
-    getcwd(pwd, COMMAND_ARGS_MAX_LENGTH + 1);
+    char pwd[PACKET_SIZE * 4];
+    getcwd(pwd, PACKET_SIZE * 4);
     if (pwd == nullptr)
     {
         _smashPError("getcwd");
-        return;
     }
-    int result = 0;
-    DO_SYS(result, chdir(newdir.c_str()));
-    *m_plastPwd = pwd;
-
-    free(pwd);
+    else
+    {
+        int result = 0;
+        DO_SYS(result, chdir(newdir.c_str()));
+        *m_plastPwd = pwd;
+        m_plastPwd->shrink_to_fit();
+    }
 }
 
 void ChangeDirCommand::execute()
@@ -304,16 +301,25 @@ void JobsCommand::execute()
     m_jobs->printJobsList();
 }
 
-void KillCommand::execute() //TOOD
+void KillCommand::execute()
 {
     if (m_args.size() != 3 || m_args[1][0] != '-')
     {
         _printErrorToScreen("kill", INVALID_ARGUMNETS);
         return;
     }
-
-    int job_id = stoi(m_args[2]);
-    int sig = -stoi(m_args[1]);
+    int job_id = 0;
+    int sig = 0;
+    try
+    {
+        job_id = stoi(m_args[2]);
+        sig = -stoi(m_args[1]);
+    }
+    catch (const std::exception &e)
+    {
+        _printErrorToScreen("kill", INVALID_ARGUMNETS);
+        return;
+    }
 
     JobsList::JobEntry *job = m_jobs->getJobById(job_id);
     if (job == nullptr)
@@ -321,7 +327,13 @@ void KillCommand::execute() //TOOD
         _printErrorToScreen("kill", "job-id " + m_args[2] + " does not exist");
         return;
     }
-    DO_SYS(sig, kill(job->getPid(), sig));
+    int ret = 0;
+    DO_SYS(ret, kill(job->getPid(), sig));
+    if (sig == SIGSTOP || sig == SIGTSTP)
+    {
+        job->setStopped(true);
+    }
+    cout << "signal number " << sig << " was sent to pid " << job->getPid() << endl;
 }
 
 void ForegroundCommand::execute()
@@ -330,12 +342,23 @@ void ForegroundCommand::execute()
 
     if (m_args.size() == 2)
     {
-        int job_id = stoi(m_args[1]);
-        if (job_id < 1)
+        int job_id = 0;
+        try
+        {
+            job_id = stoi(m_args[1]);
+        }
+        catch (const std::exception &e)
         {
             _printErrorToScreen("fg", INVALID_ARGUMNETS);
             return;
         }
+
+        /*
+        if (job_id < 1)
+        {
+            _printErrorToScreen("fg", INVALID_ARGUMNETS);
+            return;
+        }*/
 
         job = m_jobs->getJobById(job_id);
         if (job == nullptr)
@@ -347,6 +370,7 @@ void ForegroundCommand::execute()
     else if (m_args.size() > 2)
     {
         _printErrorToScreen("fg", INVALID_ARGUMNETS);
+        return;
     }
     else
     {
@@ -365,7 +389,6 @@ void ForegroundCommand::execute()
 
     std::string command = job->getCommand();
     job->setFg(true);
-    //  m_jobs->removeJobById(job->getJobId());
     Command::runProcessInForeground(pidJob, command);
 }
 
@@ -376,8 +399,12 @@ void BackgroundCommand::execute()
 
     if (m_args.size() == 2)
     {
-        int job_id = stoi(m_args[1]);
-        if (job_id < 1)
+        int job_id = 0;
+        try
+        {
+            job_id = stoi(m_args[1]);
+        }
+        catch (const std::exception &e)
         {
             _printErrorToScreen("bg", INVALID_ARGUMNETS);
             return;
@@ -398,6 +425,7 @@ void BackgroundCommand::execute()
     else if (m_args.size() > 2)
     {
         _printErrorToScreen("bg", INVALID_ARGUMNETS);
+        return;
     }
     else
     {
@@ -415,8 +443,6 @@ void BackgroundCommand::execute()
 
     job->setStopped(false);
     FUNC_EXIT()
-
-    //TODO: check if we need o add & to the end of the command
 }
 
 void QuitCommand::execute()
@@ -448,7 +474,6 @@ JobsList::~JobsList()
 void JobsList::addJob(std::string cmd, pid_t pid, time_t time, bool isStopped)
 {
     removeFinishedJobs();
-    JobEntry *job = nullptr;
     if (static_cast<int>((m_jobEntries.size() - 1)) == m_maxJobId)
     {
         m_jobEntries.resize(m_maxJobId * 2);
@@ -459,9 +484,9 @@ void JobsList::addJob(std::string cmd, pid_t pid, time_t time, bool isStopped)
         }
     }
     int id = ++m_maxJobId;
-    job = new JobEntry(cmd, pid, time, id, isStopped);
-    m_jobEntries[id] = job;
+    m_jobEntries[id] = new JobEntry(cmd, pid, time, id, isStopped);
 }
+
 void JobsList::printJobsList()
 {
     removeFinishedJobs();
@@ -487,6 +512,7 @@ void JobsList::printJobsList()
 }
 void JobsList::killAllJobs()
 {
+   // removeFinishedJobs();
     int num = 0;
     for (int i = 0; i < static_cast<int>(m_jobEntries.size()); i++)
     {
@@ -495,7 +521,7 @@ void JobsList::killAllJobs()
             num++;
         }
     }
-    std::cout << "smash: sending SIGKILL signal to " << num << "jobs:" << std::endl;
+    std::cout << "smash: sending SIGKILL signal to " << num << " jobs:" << std::endl;
     for (JobEntry *job : m_jobEntries)
     {
         if (job == nullptr)
@@ -508,10 +534,11 @@ void JobsList::killAllJobs()
         DO_SYS(ret, kill(job->getPid(), SIGKILL));
     }
 }
+
 void JobsList::removeFinishedJobs()
 {
     bool maxFinished = false;
-    for (int i = 0; i < static_cast<int>(m_jobEntries.size()); i++)
+    for (size_t i = 0; i < m_jobEntries.size(); i++)
     {
         JobEntry *job = m_jobEntries[i];
         if (job == nullptr)
@@ -527,11 +554,10 @@ void JobsList::removeFinishedJobs()
         {
             if (WIFEXITED(stat) || WIFSIGNALED(stat))
             {
-                if (i == m_maxJobId)
+                if (i == static_cast<size_t>(m_maxJobId))
                 {
                     maxFinished = true;
                 }
-                //waitpid(job->getPid(), nullptr, 0);
                 delete m_jobEntries[i];
                 m_jobEntries[i] = nullptr;
             }
@@ -553,6 +579,7 @@ void JobsList::removeFinishedJobs()
 }
 JobsList::JobEntry *JobsList::getJobById(int jobId)
 {
+    //    removeFinishedJobs();
     if ((jobId < 1) || (jobId > m_maxJobId))
     {
         return nullptr;
@@ -564,6 +591,7 @@ JobsList::JobEntry *JobsList::getJobById(int jobId)
 }
 void JobsList::removeJobById(int jobId)
 {
+    //  removeFinishedJobs();
     delete getJobById(jobId);
     m_jobEntries[jobId] = nullptr;
     if (jobId == m_maxJobId)
@@ -579,8 +607,10 @@ void JobsList::removeJobById(int jobId)
         m_maxJobId = 0;
     }
 }
+
 JobsList::JobEntry *JobsList::getLastJob(int *lastJobId)
 {
+    //removeFinishedJobs();
     if (lastJobId != nullptr)
     {
         *lastJobId = m_maxJobId;
@@ -588,8 +618,10 @@ JobsList::JobEntry *JobsList::getLastJob(int *lastJobId)
 
     return getJobById(m_maxJobId);
 }
+
 JobsList::JobEntry *JobsList::getLastStoppedJob(int *jobId)
 {
+   // removeFinishedJobs();
     for (int i = m_maxJobId; i > 0; --i)
     {
         if ((m_jobEntries[i] != nullptr) && m_jobEntries[i]->isStopped())
@@ -606,6 +638,7 @@ JobsList::JobEntry *JobsList::getLastStoppedJob(int *jobId)
 
 JobsList::JobEntry *JobsList::getJobByPid(int pid)
 {
+    //  removeFinishedJobs();
     for (int i = 0; i <= m_maxJobId; i++)
     {
         if (m_jobEntries[i] != nullptr)
@@ -636,7 +669,15 @@ void ExternalCommand::execute()
 
         sCmd = sCmd.substr(sCmd.find_first_of(WHITESPACE));
         sCmd = _trim(sCmd);
-        alarm.duration = atoi(sCmd.substr(0, sCmd.find_first_of(WHITESPACE)).c_str());
+        try
+        {
+            alarm.duration = stoi(sCmd.substr(0, sCmd.find_first_of(WHITESPACE)));
+        }
+        catch (const std::exception &e)
+        {
+            _printErrorToScreen("timeout", INVALID_ARGUMNETS);
+            return;
+        }
 
         sCmd = _trim(sCmd);
         sCmd = sCmd.substr(sCmd.find_first_of(WHITESPACE));
@@ -658,12 +699,12 @@ void ExternalCommand::execute()
         memcpy(cmd, sCmd.c_str(), sizeof(char) * size);
         _removeBackgroundSign(cmd);
 
-        char bash[] = {"bash"};
+        char bash[] = {"/bin/bash"};
         char c[] = {"-c"};
         char *const args[] = {bash, c, cmd, NULL};
 
-        execv("/bin/bash", args);
-        _smashPError("execv");
+        execvp("/bin/bash", args);
+        _smashPError("execvp");
         return;
     }
     else if (pid > 0)
@@ -724,11 +765,14 @@ void Command::runProcessInForeground(pid_t pid, std::string command)
     smash.m_currForegroundCommand = command;
     int stat = 0;
     pid_t ret;
-    while (true)
+
+    bool wait = true;
+    while (wait)
     {
         DO_SYS(ret, waitpid(pid, &stat, WNOHANG | WUNTRACED));
         if (ret > 0) //finished
         {
+
             if (WIFEXITED(stat) || WIFSIGNALED(stat))
             {
                 JobsList::JobEntry *job = smash.m_jobs.getJobByPid(pid);
@@ -736,11 +780,11 @@ void Command::runProcessInForeground(pid_t pid, std::string command)
                 {
                     smash.m_jobs.removeJobById(job->getJobId());
                 }
-                break;
+                wait = false;
             }
             if (WIFSTOPPED(stat)) // end
             {
-                break;
+                wait = false;
             }
         }
     }
@@ -766,9 +810,14 @@ void RedirectionCommand::execute()
     {
         flags = flags | O_TRUNC;
     }
-
-    int fd_out;
-    DO_SYS(fd_out, open(m_outPutFile.c_str(), flags, S_IRUSR | S_IWUSR | S_IWGRP | S_IRGRP | S_IROTH | S_IWOTH));
+    int fd_out = open(m_outPutFile.c_str(), flags, S_IRWXU | S_IRWXG | S_IRWXO);
+    if (fd_out == -1)
+    {
+        DO_SYS(ret, dup(temp_stdout_fd));
+        DO_SYS(ret, close(temp_stdout_fd));
+        _smashPError("open");
+        return;
+    }
 
     SmallShell::getInstance().executeCommand(m_cmd.c_str());
 
@@ -826,17 +875,16 @@ void PipeCommand::prepare()
 
     cmd2 = s.substr(pos, s.size());
 
-    char *tempCmd1 = (char *)malloc(sizeof(char) * COMMAND_ARGS_MAX_LENGTH);
+    char tempCmd1[COMMAND_ARGS_MAX_LENGTH];
+    char tempCmd2[COMMAND_ARGS_MAX_LENGTH];
+
     memcpy(tempCmd1, cmd1.c_str(), sizeof(char) * COMMAND_ARGS_MAX_LENGTH);
     _removeBackgroundSign(tempCmd1);
     m_cmd1 = tempCmd1;
-    free(tempCmd1);
 
-    char *tempCmd2 = (char *)malloc(sizeof(char) * COMMAND_ARGS_MAX_LENGTH);
     memcpy(tempCmd2, cmd2.c_str(), sizeof(char) * COMMAND_ARGS_MAX_LENGTH);
     _removeBackgroundSign(tempCmd2);
     m_cmd2 = tempCmd2;
-    free(tempCmd2);
 }
 
 void PipeCommand::execute()
@@ -852,6 +900,7 @@ void PipeCommand::execute()
     DO_SYS(pid_cmd_1, fork());
     if (pid_cmd_1 == 0)
     { // cmd1
+        DO_SYS(ret, setpgrp());
         int fd = m_isErr ? STDERR : STDOUT;
         DO_SYS(ret, close(fd));
         DO_SYS(ret, close(my_pipe[0]));
@@ -865,6 +914,7 @@ void PipeCommand::execute()
         DO_SYS(pid_cmd_2, fork());
         if (pid_cmd_2 == 0)
         { // cmd2
+            DO_SYS(ret, setpgrp());
             DO_SYS(ret, close(my_pipe[1]));
             DO_SYS(ret, close(STDIN));
             DO_SYS(ret, dup(my_pipe[0]));
